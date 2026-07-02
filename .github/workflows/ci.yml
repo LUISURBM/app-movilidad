@@ -47,3 +47,25 @@ jobs:
 
       - name: Suite completa (142 tests)
         run: pnpm test
+
+  sync_core:
+    name: Mobile — sync_core (Dart puro, analyze + 13 escenarios)
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    defaults:
+      run:
+        working-directory: mobile/sync_core
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Dart SDK
+        uses: dart-lang/setup-dart@v1
+        with:
+          sdk: stable
+
+      - name: Análisis estático
+        run: dart analyze
+
+      - name: Escenarios spec-010 (cliente)
+        run: dart run tool/verificar.dart

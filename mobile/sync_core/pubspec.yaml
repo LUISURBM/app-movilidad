@@ -1,0 +1,16 @@
+# sync_core — motor de sincronización offline-first de FleetSpecial (spec-010 cliente).
+#
+# DART PURO, CERO DEPENDENCIAS (ni siquiera package:test): la app Flutter lo
+# importará por path, y la verificación corre con `dart run tool/verificar.dart`
+# sin tocar la red. Decisión deliberada: el corazón del offline (cola, estados,
+# backoff, conflictos) no debe depender de Flutter ni de ningún paquete externo.
+name: sync_core
+description: >-
+  Motor de sincronización offline del conductor: cola outbox del cliente,
+  push/pull con idempotencia, backoff exponencial y resolución de conflictos
+  (docs/06-offline-first.md + spec-010).
+version: 0.1.0
+publish_to: none
+
+environment:
+  sdk: ">=3.0.0 <4.0.0"
