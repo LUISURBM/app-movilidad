@@ -1,0 +1,268 @@
+Actúa como un equipo de arquitectura empresarial, producto, UX, desarrollo de software y gestión de proyectos.
+
+Tu objetivo es transformar una idea de negocio en un proyecto ejecutable utilizando:
+
+- Spec Driven Development (SDD)
+- Domain Driven Design (DDD)
+- Clean Architecture
+- API First
+- Offline First
+- Cloud Native
+- AI Agent Friendly Development
+
+Debes generar artefactos reutilizables y agnósticos a la plataforma.
+
+## Contexto
+
+Idea:
+
+Plataforma SaaS para empresas de transporte especial y flotas pequeñas en Colombia.
+
+Objetivo:
+
+- Gestión de vehículos
+- Gestión de conductores
+- Gestión documental
+- Programación de servicios
+- Control de combustible
+- Control de mantenimiento
+- GPS
+- Operación offline
+- Aplicación Flutter para conductores
+- Portal web administrativo
+- Modelo multiempresa
+
+Usuarios:
+
+Conductores, usuarios, administradores, representantes legales, gestores de planilla, dueños de vehiculos
+
+Modelo de negocio:
+
+El fundador operará inicialmente una Renault Duster afiliada a una empresa transportadora para validar el negocio antes de escalar a una empresa propia y posteriormente comercializar el software como SaaS.
+
+Restricciones:
+
+{{RESTRICCIONES}}
+
+---
+
+FASE 1
+
+Genera un análisis del negocio.
+
+Entregar:
+
+1. Problema principal.
+2. Oportunidad de mercado.
+3. Usuarios.
+4. Casos de uso.
+5. MVP recomendado.
+6. Roadmap 12 meses.
+7. Riesgos.
+8. Supuestos a validar.
+
+---
+
+FASE 2
+
+Aplicar Domain Driven Design.
+
+Identificar:
+
+- Bounded Contexts
+- Aggregates
+- Entities
+- Value Objects
+- Domain Events
+- Policies
+- Workflows
+
+Generar diagramas en formato Mermaid.
+
+---
+
+FASE 3
+
+Crear estructura de Spec Driven Development.
+
+Generar:
+
+/specs
+
+spec-001
+spec-002
+spec-003
+
+etc.
+
+Para cada spec:
+
+- Objetivo
+- Actor
+- Reglas
+- Casos felices
+- Casos alternativos
+- Casos de error
+- Criterios de aceptación
+
+Utilizar formato Gherkin.
+
+---
+
+FASE 4
+
+Crear EDT (Estructura de Desglose del Trabajo).
+
+Generar:
+
+Epic
+Feature
+Story
+Task
+Subtask
+
+Incluir:
+
+- prioridad
+- complejidad
+- dependencias
+- estimación
+
+Formato Markdown.
+
+---
+
+FASE 5
+
+Diseñar arquitectura técnica.
+
+Frontend:
+- Web
+- Mobile
+
+Backend:
+- APIs
+- Eventos
+- Persistencia
+
+Infraestructura:
+- Desarrollo
+- QA
+- Producción
+
+Incluir diagramas Mermaid.
+
+---
+
+FASE 6
+
+Diseñar arquitectura Offline First.
+
+Definir:
+
+- almacenamiento local
+- sincronización
+- conflictos
+- recuperación
+
+---
+
+FASE 7
+
+Diseñar estrategia SaaS Multi Tenant.
+
+Definir:
+
+- tenant model
+- usuarios
+- roles
+- suscripciones
+- monetización
+
+---
+
+FASE 8
+
+Diseñar AI Agent Layer.
+
+La solución debe poder ser utilizada por:
+
+- ChatGPT
+- Claude
+- Gemini
+- Cursor
+- Windsurf
+- Cline
+- Roo Code
+- Gravity
+- OpenAI Agents
+- futuros agentes
+
+Generar:
+
+/agents
+
+agent-product-manager.md
+agent-business-analyst.md
+agent-architect.md
+agent-backend.md
+agent-frontend.md
+agent-mobile.md
+agent-qa.md
+agent-devops.md
+
+Definir responsabilidades y prompts base.
+
+---
+
+FASE 9
+
+Diseñar estructura del repositorio.
+
+Generar árbol completo.
+
+Ejemplo:
+
+/docs
+/specs
+/adr
+/agents
+/backend
+/frontend
+/mobile
+/infrastructure
+/tests
+
+---
+
+FASE 10
+
+Generar roadmap.
+
+Horizonte:
+
+- MVP
+- V1
+- V2
+- Escalamiento SaaS
+- Marketplace
+- Enterprise
+
+Mostrar dependencias y hitos.
+
+---
+
+Reglas
+
+- No generar código inicialmente.
+- Priorizar análisis.
+- Detectar sobreingeniería.
+- Mantener MVP pequeño.
+- Diseñar para evolución.
+- Mantener independencia de proveedor IA.
+- Mantener independencia de nube.
+- Mantener independencia de framework.
+
+Resultado esperado:
+
+Un blueprint empresarial y tecnológico completo, reutilizable y ejecutable.
