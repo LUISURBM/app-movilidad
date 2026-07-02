@@ -1,0 +1,43 @@
+# FleetSpecial — app del Conductor (offline-first, spec-010).
+# Fase 2a: capa de datos (Drift + HTTP + triggers). La UI llega en la fase 2b.
+#
+# NOTA (carpetas de plataforma): android/ e ios/ NO están commiteadas; se
+# generan en tu máquina con `flutter create .` dentro de este directorio
+# (respeta lib/ y pubspec existentes). Ver README.md.
+name: fleetspecial_app
+description: App del Conductor de FleetSpecial (offline-first).
+version: 0.1.0
+publish_to: none
+
+environment:
+  sdk: ">=3.3.0 <4.0.0"
+
+dependencies:
+  flutter:
+    sdk: flutter
+
+  # Motor de sincronización (Dart puro, del monorepo).
+  sync_core:
+    path: ../sync_core
+
+  # Almacenamiento local (doc 06 §3): tablas espejo + cola outbox.
+  # TODO(Habeas Data, doc 06 §3.4): cambiar a SQLCipher (sqlcipher_flutter_libs
+  # + clave en Keystore/Keychain) ANTES de manejar datos de terceros; para el
+  # dogfooding con datos propios se arranca sin cifrado.
+  drift: ^2.18.0
+  drift_flutter: ^0.2.0
+  path_provider: ^2.1.0
+
+  # Transporte y triggers (doc 06 §4).
+  http: ^1.2.0
+  connectivity_plus: ^6.0.0
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  drift_dev: ^2.18.0
+  build_runner: ^2.4.0
+  flutter_lints: ^4.0.0
+
+flutter:
+  uses-material-design: true

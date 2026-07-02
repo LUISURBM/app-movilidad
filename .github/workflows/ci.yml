@@ -75,3 +75,32 @@ jobs:
 
       - name: Escenarios spec-010 (cliente)
         run: dart run tool/verificar.dart
+
+  flutter_app:
+    name: Mobile — app del Conductor (capa de datos, fase 2a)
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    defaults:
+      run:
+        working-directory: mobile/fleetspecial_app
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Flutter SDK
+        uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          cache: true
+
+      - name: Dependencias
+        run: flutter pub get
+
+      - name: Generar código Drift
+        run: dart run build_runner build --delete-conflicting-outputs
+
+      - name: Análisis estático
+        run: flutter analyze
+
+      - name: Tests (adaptadores Drift + HTTP + ciclo completo)
+        run: flutter test
