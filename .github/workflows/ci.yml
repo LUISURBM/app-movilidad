@@ -64,6 +64,12 @@ jobs:
         with:
           sdk: stable
 
+      # `dart analyze` NO hace pub get implícito (a diferencia de `dart run`);
+      # sin package_config no puede resolver `package:sync_core/...` del runner.
+      # Con cero dependencias esto no descarga nada: solo escribe .dart_tool/.
+      - name: Resolver paquete
+        run: dart pub get
+
       - name: Análisis estático
         run: dart analyze
 
