@@ -39,7 +39,21 @@ npx tsx tool/seed-demo.ts --url http://localhost:3000/v1 --token <TOKEN-OPERADOR
 Crea: catálogo SOAT → SOAT vigente del vehículo `veh-duster` → 2 servicios de
 hoy asignados a `cond-luis` (la regla de oro pasa en verde).
 
-## 4) APK
+## 4) APK — Opción A (recomendada): compilado por GitHub Actions
+
+Sin instalar nada de Android en tu PC:
+
+1. GitHub → pestaña **Actions** → workflow **"APK demo (Android)"** → **Run workflow** (~10 min).
+2. Al terminar, queda un **Release** `demo-apk-N` con `fleetspecial-demo.apk`.
+3. **Desde el teléfono:** abre github.com en el navegador, inicia sesión (repo
+   privado), entra a *Releases* del repo y descarga el APK. Android pedirá
+   permitir "instalar de origen desconocido" para el navegador — acéptalo.
+
+> El APK ya trae permitido `http://` hacia tu LAN (el workflow inyecta INTERNET
+> + cleartext al manifest) y va firmado con la debug key: perfecto para demo,
+> NO para distribución.
+
+## 4-bis) APK — Opción B: compilar en tu PC
 
 ```powershell
 cd mobile\fleetspecial_app
@@ -75,7 +89,10 @@ APK en `build\app\outputs\flutter-apk\app-debug.apk` → pásalo al teléfono
 5. **Quitar modo avión** → en segundos el badge desaparece: sincronizó.
 6. Prueba de fe en el PC: 
    `curl http://localhost:3000/v1/servicios -H "Authorization: Bearer <TOKEN-OPERADOR>"`
-   → el servicio está `Finalizado` con los odómetros del teléfono.
+   → el servicio está `Finalizado` con `inicioReal`/`finReal` = las horas exactas
+   marcadas en el teléfono sin señal (los odómetros viajan en los eventos del outbox).
+7. Bonus: repetir el push desde la app (pull-to-refresh) no duplica nada —
+   idempotencia demostrable en vivo.
 7. Remate (regla de oro): registra un documento vencido a otro vehículo e
    intenta asignarle un servicio → `409 incumplimiento`. *"El sistema no deja
    despachar un vehículo ilegal."*

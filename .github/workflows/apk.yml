@@ -1,0 +1,82 @@
+# Compila el APK del demo EN GITHUB ACTIONS y lo publica como Release.
+#
+# Disparo MANUAL: pestaña Actions → "APK demo (Android)" → Run workflow.
+# Resultado: Release `demo-apk-N` con `fleetspecial-demo.apk` adjunto
+# (repo privado ⇒ descargar con sesión de GitHub, también desde el teléfono).
+#
+# Notas de build:
+#  - `flutter create .` genera android/ en el runner (no está commiteado).
+#  - Se inyectan al AndroidManifest el permiso INTERNET y usesCleartextTraffic
+#    (la plantilla de Flutter no trae INTERNET en el manifest principal y
+#    Android 9+ bloquea http:// sin cleartext — el demo habla http://IP-LAN).
+#  - `--release` queda firmado con la debug key (default de la plantilla):
+#    instalable para demo; NO es firma de producción.
+name: APK demo (Android)
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: write # crear el Release
+
+jobs:
+  apk:
+    name: Build APK (release firmado con debug key)
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    defaults:
+      run:
+        working-directory: mobile/fleetspecial_app
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Java 17 (Gradle/Android)
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+
+      - name: Flutter SDK
+        uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          cache: true
+
+      - name: Generar carpetas de plataforma (android/)
+        run: flutter create . --platforms android
+
+      - name: Permitir red del demo (INTERNET + cleartext http hacia la LAN)
+        run: |
+          M=android/app/src/main/AndroidManifest.xml
+          sed -i 's|<application|<uses-permission android:name="android.permission.INTERNET"/><application android:usesCleartextTraffic="true"|' "$M"
+          grep -q usesCleartextTraffic "$M" && echo "manifest ajustado ✓"
+
+      - name: Dependencias
+        run: flutter pub get
+
+      - name: Generar código Drift
+        run: dart run build_runner build --delete-conflicting-outputs
+
+      - name: Compilar APK
+        run: |
+          flutter build apk --release
+          mv build/app/outputs/flutter-apk/app-release.apk build/fleetspecial-demo.apk
+
+      - name: Subir como artifact del run
+        uses: actions/upload-artifact@v4
+        with:
+          name: fleetspecial-demo-apk
+          path: mobile/fleetspecial_app/build/fleetspecial-demo.apk
+
+      - name: Publicar Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: demo-apk-${{ github.run_number }}
+          name: "APK demo #${{ github.run_number }}"
+          prerelease: true
+          body: |
+            APK del demo (spec-010, offline-first). Firmado con debug key — solo demo.
+            Instalar en Android → configurar URL `http://IP-DEL-PC:3000/v1` + token
+            de conductor (ver docs/DEMO-APK.md).
+          files: mobile/fleetspecial_app/build/fleetspecial-demo.apk
