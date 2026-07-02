@@ -1,0 +1,49 @@
+# CI de FleetSpecial — corre la suite completa del backend en cada push/PR.
+#
+# La suite NO necesita servicios externos: los tests de integración usan PGlite
+# (Postgres compilado a WASM, in-process), así que no hay contenedor de Postgres.
+# Duración esperada: ~2-3 min.
+#
+# NOTA lockfile: cuando corras `pnpm install` local y commitees `pnpm-lock.yaml`,
+# cambia el paso de instalación a `pnpm install --frozen-lockfile` y activa la
+# caché (`cache: pnpm` en setup-node) para builds reproducibles y más rápidos.
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  backend:
+    name: Backend — typecheck + tests (unit, integración PG, E2E HTTP)
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      # pnpm 10+: requerido por las defensas de cadena de suministro
+      # declaradas en pnpm-workspace.yaml (minimumReleaseAge).
+      - name: Instalar pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 10
+
+      - name: Node 22
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Instalar dependencias
+        run: pnpm install
+
+      - name: Typecheck
+        run: pnpm typecheck
+
+      - name: Suite completa (142 tests)
+        run: pnpm test

@@ -53,6 +53,17 @@ git remote add origin https://github.com/<TU_USUARIO>/fleetspecial.git
 git push -u origin main --tags
 ```
 
+## CI (GitHub Actions)
+
+`.github/workflows/ci.yml` corre typecheck + los 142 tests en cada push/PR a
+`main` (sin servicios externos: la integración usa PGlite in-process).
+
+- **Badge para el README** (reemplazar `<TU_USUARIO>`):
+  `![CI](https://github.com/<TU_USUARIO>/fleetspecial/actions/workflows/ci.yml/badge.svg)`
+- Tras commitear `pnpm-lock.yaml` (se genera con el primer `pnpm install` local):
+  cambiar a `pnpm install --frozen-lockfile` y activar `cache: pnpm` en setup-node.
+- Sugerido en GitHub: Settings → Branches → proteger `main` exigiendo el check "CI".
+
 ## Convenciones desde ahora
 
 - **Conventional Commits** (`feat:`, `fix:`, `docs:`, `test:`, `refactor:`) —
