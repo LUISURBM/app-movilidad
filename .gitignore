@@ -1,0 +1,25 @@
+# Dependencias
+node_modules/
+.dart_tool/
+.packages
+build/
+dist/
+# Entornos
+.env
+.env.*
+*.local
+# Artefactos de IaC
+*.tfstate
+*.tfstate.*
+.terraform/
+# Logs y temporales
+*.log
+.DS_Store
+Thumbs.db
+# IDE
+.idea/
+.vscode/
+*.iml
+# Cobertura/pruebas
+coverage/
+.nyc_output/

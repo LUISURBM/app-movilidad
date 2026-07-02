@@ -1,0 +1,504 @@
+asyncapi: 3.0.0
+info:
+  title: FleetSpecial — Eventos de Dominio
+  version: 1.0.0
+  description: |
+    Contrato **AsyncAPI** de los eventos de dominio de FleetSpecial, publicados de forma
+    confiable mediante el **patrón outbox** (ADR-0004): cada cambio de estado relevante se
+    persiste transaccionalmente junto con su evento y un worker lo publica.
+
+    En el MVP **no hay broker**: el "canal" es la tabla `outbox` + un dispatcher in-process,
+    y los consumidores son otros módulos del monolito. Este contrato documenta el esquema de
+    los eventos para que productores, consumidores y **agentes IA** compartan el mismo lenguaje,
+    y para poder evolucionar a un broker (NATS/RabbitMQ) sin cambiar los payloads.
+
+    Catálogo y trazabilidad: Fase 2 (Domain Driven Design) §Domain Events y §Policies.
+    Todos los eventos comparten una **envolvente común** (`EventEnvelope`) con metadatos de
+    tenant, id, tipo, versión y marca de tiempo.
+
+defaultContentType: application/json
+
+servers:
+  outbox:
+    host: 'in-process'
+    protocol: outbox
+    description: |
+      Outbox transaccional + dispatcher in-process (MVP, ADR-0004). Evoluciona a NATS o
+      RabbitMQ cuando el volumen lo justifique, conservando estos esquemas.
+
+channels:
+  domainEvents:
+    address: fleetspecial.domain-events
+    description: Flujo único de eventos de dominio (ordenados por tenant vía el outbox).
+    messages:
+      VehiculoRegistrado: { $ref: '#/components/messages/VehiculoRegistrado' }
+      VehiculoDadoDeBaja: { $ref: '#/components/messages/VehiculoDadoDeBaja' }
+      OdometroActualizado: { $ref: '#/components/messages/OdometroActualizado' }
+      ConductorRegistrado: { $ref: '#/components/messages/ConductorRegistrado' }
+      DocumentoRegistrado: { $ref: '#/components/messages/DocumentoRegistrado' }
+      DocumentoPorVencer: { $ref: '#/components/messages/DocumentoPorVencer' }
+      DocumentoVencido: { $ref: '#/components/messages/DocumentoVencido' }
+      DocumentoRenovado: { $ref: '#/components/messages/DocumentoRenovado' }
+      ServicioCreado: { $ref: '#/components/messages/ServicioCreado' }
+      ServicioAsignado: { $ref: '#/components/messages/ServicioAsignado' }
+      AsignacionRechazada: { $ref: '#/components/messages/AsignacionRechazada' }
+      ServicioIniciado: { $ref: '#/components/messages/ServicioIniciado' }
+      ServicioFinalizado: { $ref: '#/components/messages/ServicioFinalizado' }
+      NovedadReportada: { $ref: '#/components/messages/NovedadReportada' }
+      CombustibleRegistrado: { $ref: '#/components/messages/CombustibleRegistrado' }
+      MantenimientoProgramado: { $ref: '#/components/messages/MantenimientoProgramado' }
+      MantenimientoVencido: { $ref: '#/components/messages/MantenimientoVencido' }
+      MantenimientoRegistrado: { $ref: '#/components/messages/MantenimientoRegistrado' }
+      PlanillaGenerada: { $ref: '#/components/messages/PlanillaGenerada' }
+      UsuarioInvitado: { $ref: '#/components/messages/UsuarioInvitado' }
+      SuscripcionActivada: { $ref: '#/components/messages/SuscripcionActivada' }
+
+operations:
+  # ───────── Compliance & Documents (CORE) ─────────
+  publishDocumentoPorVencer:
+    action: send
+    channel: { $ref: '#/channels/domainEvents' }
+    summary: 'Compliance emite cuando un documento queda a 30/15/3 días (política P1).'
+    messages:
+      - $ref: '#/channels/domainEvents/messages/DocumentoPorVencer'
+  publishDocumentoVencido:
+    action: send
+    channel: { $ref: '#/channels/domainEvents' }
+    summary: 'Compliance emite al superarse el vencimiento; pone el semáforo en rojo (P2).'
+    messages:
+      - $ref: '#/channels/domainEvents/messages/DocumentoVencido'
+  publishDocumentoRenovado:
+    action: send
+    channel: { $ref: '#/channels/domainEvents' }
+    summary: 'Compliance emite tras una renovación; puede rehabilitar asignaciones (P5).'
+    messages:
+      - $ref: '#/channels/domainEvents/messages/DocumentoRenovado'
+
+  # ───────── Service Scheduling (CORE) ─────────
+  publishServicioAsignado:
+    action: send
+    channel: { $ref: '#/channels/domainEvents' }
+    summary: 'Scheduling emite al asignar vehículo+conductor (sincroniza la app del conductor).'
+    messages:
+      - $ref: '#/channels/domainEvents/messages/ServicioAsignado'
+  publishAsignacionRechazada:
+    action: send
+    channel: { $ref: '#/channels/domainEvents' }
+    summary: 'Scheduling emite cuando la regla de oro bloquea una asignación (P3, spec-009).'
+    messages:
+      - $ref: '#/channels/domainEvents/messages/AsignacionRechazada'
+  publishServicioFinalizado:
+    action: send
+    channel: { $ref: '#/channels/domainEvents' }
+    summary: 'Scheduling emite al finalizar; alimenta Fleet (odómetro), Billing y Maintenance.'
+    messages:
+      - $ref: '#/channels/domainEvents/messages/ServicioFinalizado'
+
+  # ───────── Fleet / Fuel / Maintenance ─────────
+  publishOdometroActualizado:
+    action: send
+    channel: { $ref: '#/channels/domainEvents' }
+    summary: 'Fleet emite al actualizar el odómetro; Maintenance evalúa umbral (P6), Fuel costo/km.'
+    messages:
+      - $ref: '#/channels/domainEvents/messages/OdometroActualizado'
+  publishCombustibleRegistrado:
+    action: send
+    channel: { $ref: '#/channels/domainEvents' }
+    summary: 'Fuel emite al registrar un tanqueo (incluye lectura de odómetro).'
+    messages:
+      - $ref: '#/channels/domainEvents/messages/CombustibleRegistrado'
+  publishMantenimientoProgramado:
+    action: send
+    channel: { $ref: '#/channels/domainEvents' }
+    summary: 'Maintenance emite al programar un preventivo (por km o fecha).'
+    messages:
+      - $ref: '#/channels/domainEvents/messages/MantenimientoProgramado'
+
+  # ───────── Consumo (ejemplos representativos) ─────────
+  onDocumentoVencido:
+    action: receive
+    channel: { $ref: '#/channels/domainEvents' }
+    summary: |
+      Scheduling consume para bloquear asignaciones del recurso; Notificaciones alerta;
+      Fleet/Driver ponen el semáforo en rojo.
+    messages:
+      - $ref: '#/channels/domainEvents/messages/DocumentoVencido'
+  onOdometroActualizado:
+    action: receive
+    channel: { $ref: '#/channels/domainEvents' }
+    summary: 'Maintenance evalúa si se supera el umbral (P6); Fuel recalcula costo por km.'
+    messages:
+      - $ref: '#/channels/domainEvents/messages/OdometroActualizado'
+
+components:
+  messageTraits:
+    commonHeaders:
+      headers:
+        type: object
+        properties:
+          idempotencyKey:
+            type: string
+            format: uuid
+            description: Clave de deduplicación para consumidores idempotentes.
+        required: [idempotencyKey]
+
+  schemas:
+    EventEnvelope:
+      type: object
+      description: Envolvente común de todos los eventos de dominio (outbox).
+      properties:
+        eventId: { type: string, format: uuid, description: Identificador único del evento (idempotencia). }
+        eventType: { type: string, description: 'Nombre del evento, p. ej. DocumentoVencido.' }
+        eventVersion: { type: integer, default: 1, description: Versión del esquema del evento. }
+        tenantId: { type: string, format: uuid, description: Tenant al que pertenece (multi-tenant). }
+        occurredAt: { type: string, format: date-time }
+        aggregateId: { type: string, format: uuid, description: Id del agregado que originó el evento. }
+      required: [eventId, eventType, tenantId, occurredAt, aggregateId]
+
+    SujetoRef:
+      type: object
+      properties:
+        tipo: { type: string, enum: [vehiculo, conductor] }
+        id: { type: string, format: uuid }
+      required: [tipo, id]
+
+  messages:
+    # ───────── Fleet ─────────
+    VehiculoRegistrado:
+      name: VehiculoRegistrado
+      title: Vehículo registrado
+      summary: 'Emisor: Fleet. Consumidores: Compliance (crea expediente), Scheduling, Billing (conteo).'
+      contentType: application/json
+      traits:
+        - $ref: '#/components/messageTraits/commonHeaders'
+      payload:
+        allOf:
+          - $ref: '#/components/schemas/EventEnvelope'
+          - type: object
+            properties:
+              vehiculoId: { type: string, format: uuid }
+              placa: { type: string }
+              clase: { type: string }
+              propietarioId: { type: string, format: uuid }
+            required: [vehiculoId, placa, clase]
+
+    VehiculoDadoDeBaja:
+      name: VehiculoDadoDeBaja
+      title: Vehículo dado de baja
+      summary: 'Emisor: Fleet. Consumidores: Scheduling, Billing (conteo de facturables).'
+      contentType: application/json
+      payload:
+        allOf:
+          - $ref: '#/components/schemas/EventEnvelope'
+          - type: object
+            properties:
+              vehiculoId: { type: string, format: uuid }
+              motivo: { type: string }
+            required: [vehiculoId]
+
+    OdometroActualizado:
+      name: OdometroActualizado
+      title: Odómetro actualizado
+      summary: 'Emisor: Fleet. Consumidores: Maintenance (evaluar umbral, P6), Fuel (costo/km).'
+      contentType: application/json
+      payload:
+        allOf:
+          - $ref: '#/components/schemas/EventEnvelope'
+          - type: object
+            properties:
+              vehiculoId: { type: string, format: uuid }
+              lectura: { type: integer }
+              fuente: { type: string, enum: [manual, tanqueo, servicio] }
+            required: [vehiculoId, lectura, fuente]
+
+    # ───────── Driver ─────────
+    ConductorRegistrado:
+      name: ConductorRegistrado
+      title: Conductor registrado
+      summary: 'Emisor: Driver. Consumidores: Compliance (crea expediente), Scheduling.'
+      contentType: application/json
+      payload:
+        allOf:
+          - $ref: '#/components/schemas/EventEnvelope'
+          - type: object
+            properties:
+              conductorId: { type: string, format: uuid }
+              usuarioId: { type: string, format: uuid }
+            required: [conductorId]
+
+    # ───────── Compliance & Documents (CORE) ─────────
+    DocumentoRegistrado:
+      name: DocumentoRegistrado
+      title: Documento registrado
+      summary: 'Emisor: Compliance. Consumidores: Scheduling (recalcular elegibilidad), Fleet/Driver (semáforo).'
+      contentType: application/json
+      payload:
+        allOf:
+          - $ref: '#/components/schemas/EventEnvelope'
+          - type: object
+            properties:
+              documentoId: { type: string, format: uuid }
+              sujeto: { $ref: '#/components/schemas/SujetoRef' }
+              tipo: { type: string }
+              vencimiento: { type: string, format: date }
+            required: [documentoId, sujeto, tipo, vencimiento]
+
+    DocumentoPorVencer:
+      name: DocumentoPorVencer
+      title: Documento por vencer
+      summary: 'Emisor: Compliance (P1). Consumidores: Notificaciones (alertas), Scheduling (advertencia).'
+      contentType: application/json
+      payload:
+        allOf:
+          - $ref: '#/components/schemas/EventEnvelope'
+          - type: object
+            properties:
+              documentoId: { type: string, format: uuid }
+              sujeto: { $ref: '#/components/schemas/SujetoRef' }
+              tipo: { type: string }
+              diasRestantes: { type: integer, enum: [30, 15, 3] }
+            required: [documentoId, sujeto, tipo, diasRestantes]
+
+    DocumentoVencido:
+      name: DocumentoVencido
+      title: Documento vencido
+      summary: 'Emisor: Compliance (P2). Consumidores: Scheduling (bloquear), Notificaciones, Fleet/Driver (rojo).'
+      contentType: application/json
+      payload:
+        allOf:
+          - $ref: '#/components/schemas/EventEnvelope'
+          - type: object
+            properties:
+              documentoId: { type: string, format: uuid }
+              sujeto: { $ref: '#/components/schemas/SujetoRef' }
+              tipo: { type: string }
+            required: [documentoId, sujeto, tipo]
+
+    DocumentoRenovado:
+      name: DocumentoRenovado
+      title: Documento renovado
+      summary: 'Emisor: Compliance (P5). Consumidores: Scheduling (rehabilitar), Notificaciones.'
+      contentType: application/json
+      payload:
+        allOf:
+          - $ref: '#/components/schemas/EventEnvelope'
+          - type: object
+            properties:
+              documentoId: { type: string, format: uuid }
+              nuevoVencimiento: { type: string, format: date }
+              versionAnterior: { type: integer }
+            required: [documentoId, nuevoVencimiento]
+
+    # ───────── Service Scheduling (CORE) ─────────
+    ServicioCreado:
+      name: ServicioCreado
+      title: Servicio creado
+      summary: 'Emisor: Scheduling. Consumidores: agenda, operador.'
+      contentType: application/json
+      payload:
+        allOf:
+          - $ref: '#/components/schemas/EventEnvelope'
+          - type: object
+            properties:
+              servicioId: { type: string, format: uuid }
+              ventana:
+                type: object
+                properties:
+                  inicio: { type: string, format: date-time }
+                  fin: { type: string, format: date-time }
+            required: [servicioId]
+
+    ServicioAsignado:
+      name: ServicioAsignado
+      title: Servicio asignado
+      summary: 'Emisor: Scheduling. Consumidores: App conductor (sync), Notificaciones.'
+      contentType: application/json
+      payload:
+        allOf:
+          - $ref: '#/components/schemas/EventEnvelope'
+          - type: object
+            properties:
+              servicioId: { type: string, format: uuid }
+              vehiculoId: { type: string, format: uuid }
+              conductorId: { type: string, format: uuid }
+              ventana:
+                type: object
+                properties:
+                  inicio: { type: string, format: date-time }
+                  fin: { type: string, format: date-time }
+            required: [servicioId, vehiculoId, conductorId]
+
+    AsignacionRechazada:
+      name: AsignacionRechazada
+      title: Asignación rechazada
+      summary: 'Emisor: Scheduling (P3, regla de oro spec-009). Consumidores: operador, auditoría.'
+      contentType: application/json
+      payload:
+        allOf:
+          - $ref: '#/components/schemas/EventEnvelope'
+          - type: object
+            properties:
+              servicioId: { type: string, format: uuid }
+              motivo: { type: string, enum: [incumplimiento, conflicto_horario] }
+              recurso: { $ref: '#/components/schemas/SujetoRef' }
+            required: [servicioId, motivo]
+
+    ServicioIniciado:
+      name: ServicioIniciado
+      title: Servicio iniciado
+      summary: 'Emisor: Scheduling. Consumidores: Fleet (odómetro), Billing.'
+      contentType: application/json
+      payload:
+        allOf:
+          - $ref: '#/components/schemas/EventEnvelope'
+          - type: object
+            properties:
+              servicioId: { type: string, format: uuid }
+              inicioReal: { type: string, format: date-time }
+              odometroInicio: { type: integer }
+            required: [servicioId, inicioReal]
+
+    ServicioFinalizado:
+      name: ServicioFinalizado
+      title: Servicio finalizado
+      summary: 'Emisor: Scheduling. Consumidores: Fleet (odómetro), Billing, Maintenance.'
+      contentType: application/json
+      payload:
+        allOf:
+          - $ref: '#/components/schemas/EventEnvelope'
+          - type: object
+            properties:
+              servicioId: { type: string, format: uuid }
+              finReal: { type: string, format: date-time }
+              odometroFin: { type: integer }
+              trazaRef: { type: string }
+            required: [servicioId, finReal]
+
+    NovedadReportada:
+      name: NovedadReportada
+      title: Novedad reportada
+      summary: 'Emisor: Scheduling. Consumidores: operador, memoria operativa.'
+      contentType: application/json
+      payload:
+        allOf:
+          - $ref: '#/components/schemas/EventEnvelope'
+          - type: object
+            properties:
+              servicioId: { type: string, format: uuid }
+              tipo: { type: string, enum: [incidente, retraso, siniestro, otro] }
+              fotoRef: { type: string }
+            required: [servicioId, tipo]
+
+    # ───────── Fuel ─────────
+    CombustibleRegistrado:
+      name: CombustibleRegistrado
+      title: Combustible registrado
+      summary: 'Emisor: Fuel. Consumidores: Fleet (odómetro), Maintenance (umbral), Billing (costos).'
+      contentType: application/json
+      traits:
+        - $ref: '#/components/messageTraits/commonHeaders'
+      payload:
+        allOf:
+          - $ref: '#/components/schemas/EventEnvelope'
+          - type: object
+            properties:
+              tanqueoId: { type: string, format: uuid }
+              vehiculoId: { type: string, format: uuid }
+              litros: { type: number }
+              valorCop: { type: integer }
+              odometro: { type: integer }
+            required: [tanqueoId, vehiculoId, litros, valorCop, odometro]
+
+    # ───────── Maintenance ─────────
+    MantenimientoProgramado:
+      name: MantenimientoProgramado
+      title: Mantenimiento programado
+      summary: 'Emisor: Maintenance (P6/P7). Consumidores: Notificaciones, Scheduling (disponibilidad).'
+      contentType: application/json
+      payload:
+        allOf:
+          - $ref: '#/components/schemas/EventEnvelope'
+          - type: object
+            properties:
+              mantenimientoId: { type: string, format: uuid }
+              vehiculoId: { type: string, format: uuid }
+              tipo: { type: string, enum: [preventivo, correctivo] }
+              dispararPor: { type: string, enum: [km, fecha] }
+            required: [mantenimientoId, vehiculoId, tipo, dispararPor]
+
+    MantenimientoVencido:
+      name: MantenimientoVencido
+      title: Mantenimiento vencido
+      summary: 'Emisor: Maintenance. Consumidores: Notificaciones, Scheduling (advertir/bloquear).'
+      contentType: application/json
+      payload:
+        allOf:
+          - $ref: '#/components/schemas/EventEnvelope'
+          - type: object
+            properties:
+              mantenimientoId: { type: string, format: uuid }
+              vehiculoId: { type: string, format: uuid }
+              umbralSuperado: { type: string }
+            required: [mantenimientoId, vehiculoId]
+
+    MantenimientoRegistrado:
+      name: MantenimientoRegistrado
+      title: Mantenimiento registrado
+      summary: 'Emisor: Maintenance. Consumidores: Billing (costos), Fleet (odómetro).'
+      contentType: application/json
+      payload:
+        allOf:
+          - $ref: '#/components/schemas/EventEnvelope'
+          - type: object
+            properties:
+              mantenimientoId: { type: string, format: uuid }
+              vehiculoId: { type: string, format: uuid }
+              costoCop: { type: integer }
+              odometro: { type: integer }
+            required: [mantenimientoId, vehiculoId]
+
+    PlanillaGenerada:
+      name: PlanillaGenerada
+      title: Planilla generada
+      summary: 'Emisor: Scheduling. Consumidores: Compliance (soporte), Notificaciones.'
+      contentType: application/json
+      payload:
+        allOf:
+          - $ref: '#/components/schemas/EventEnvelope'
+          - type: object
+            properties:
+              planillaId: { type: string, format: uuid }
+              servicioId: { type: string, format: uuid }
+              documentoRef: { type: string }
+            required: [planillaId, servicioId]
+
+    # ───────── IAM / Billing ─────────
+    UsuarioInvitado:
+      name: UsuarioInvitado
+      title: Usuario invitado
+      summary: 'Emisor: IAM. Consumidores: Notificaciones (onboarding).'
+      contentType: application/json
+      payload:
+        allOf:
+          - $ref: '#/components/schemas/EventEnvelope'
+          - type: object
+            properties:
+              usuarioId: { type: string, format: uuid }
+              roles:
+                type: array
+                items: { type: string }
+            required: [usuarioId, roles]
+
+    SuscripcionActivada:
+      name: SuscripcionActivada
+      title: Suscripción activada
+      summary: 'Emisor: Billing. Consumidores: IAM (límites), todos (habilitación por plan).'
+      contentType: application/json
+      payload:
+        allOf:
+          - $ref: '#/components/schemas/EventEnvelope'
+          - type: object
+            properties:
+              planId: { type: string }
+              vehiculosIncluidos: { type: integer }
+            required: [planId]

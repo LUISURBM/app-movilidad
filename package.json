@@ -1,0 +1,13 @@
+{
+  "name": "fleetspecial",
+  "version": "0.1.0",
+  "private": true,
+  "description": "FleetSpecial — SaaS multi-tenant de transporte especial (Colombia). Monorepo: backend NestJS, frontend Next.js; la app Flutter vive en mobile/ fuera del workspace JS.",
+  "license": "LicenseRef-Proprietary",
+  "scripts": {
+    "test": "pnpm --filter @fleetspecial/backend test",
+    "test:unit": "pnpm --filter @fleetspecial/backend test:unit",
+    "typecheck": "pnpm --filter @fleetspecial/backend typecheck",
+    "start:backend": "pnpm --filter @fleetspecial/backend start:dev"
+  }
+}

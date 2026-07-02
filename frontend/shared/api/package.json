@@ -1,0 +1,26 @@
+{
+  "name": "@fleetspecial/api",
+  "version": "1.0.0",
+  "description": "SDK TypeScript tipado de FleetSpecial, generado desde el contrato OpenAPI (API First).",
+  "license": "LicenseRef-Proprietary",
+  "type": "module",
+  "main": "index.ts",
+  "types": "index.ts",
+  "exports": {
+    ".": "./index.ts"
+  },
+  "scripts": {
+    "gen:api": "openapi-typescript ../../../backend/contracts/openapi.yaml -o ./schema.d.ts",
+    "typecheck": "tsc --noEmit",
+    "mock": "prism mock ../../../backend/contracts/openapi.yaml --port 4010",
+    "mock:dynamic": "prism mock ../../../backend/contracts/openapi.yaml --port 4010 --dynamic"
+  },
+  "dependencies": {
+    "openapi-fetch": "^0.13.0"
+  },
+  "devDependencies": {
+    "@stoplight/prism-cli": "^5.8.0",
+    "openapi-typescript": "^7.4.0",
+    "typescript": "^5.5.0"
+  }
+}

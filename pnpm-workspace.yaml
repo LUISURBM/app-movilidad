@@ -1,0 +1,12 @@
+# Workspace de pnpm — gestor oficial del monorepo JS/TS (ver adr/0009).
+# La app móvil (Flutter/Dart) NO se gestiona aquí.
+packages:
+  - "backend"
+  - "frontend/*"
+  - "frontend/shared/*"
+
+# Defensas de cadena de suministro (restricción de cumplimiento del proyecto).
+# Disponibles en pnpm 10+/11+. Ajustar según la versión instalada.
+minimumReleaseAge: 1440        # esperar 24 h antes de adoptar una versión recién publicada (minutos)
+# Por defecto pnpm no ejecuta scripts postinstall de dependencias no aprobadas.
+# Aprobar explícitamente solo las que lo requieran con: pnpm approve-builds

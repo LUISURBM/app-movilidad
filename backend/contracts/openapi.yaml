@@ -1,0 +1,1411 @@
+openapi: 3.1.0
+info:
+  title: FleetSpecial API
+  version: 1.0.0
+  description: |
+    Contrato **REST (API First)** de FleetSpecial — SaaS multi-tenant para transporte
+    especial y flotas pequeñas en Colombia.
+
+    Este contrato **antecede al código** (Spec Driven Development): de él se generan el
+    SDK del portal web, los mocks para que web y móvil avancen en paralelo, y la
+    validación de requests en runtime. Deriva de las specs aprobadas (Fase 3) y del
+    modelo de dominio (Fase 2).
+
+    ## Trazabilidad spec → endpoints
+    - spec-001 Onboarding de Empresa (Tenant) ....... POST /tenants
+    - spec-002 Invitar usuarios y roles ............. POST /usuarios, /usuarios/{id}
+    - spec-003 Registrar Vehículo ................... /vehiculos
+    - spec-004 Registrar Conductor + Licencia ....... /conductores
+    - spec-005 Registrar Documento + adjunto ........ /documentos
+    - spec-006 Alertas / Semáforo ................... GET /cumplimiento/*
+    - spec-007 Renovación de Documento .............. POST /documentos/{id}/renovaciones
+    - spec-008 Crear Servicio + Asignación .......... /servicios, /asignaciones
+    - spec-009 Regla de oro (bloqueo asignación) .... efecto en POST /asignaciones (409)
+    - spec-010 Conductor offline (mi día, sync) ..... /sync/*, /servicios/{id}/estado
+    - spec-011 Tanqueo offline append-only .......... POST /combustible (Idempotency-Key)
+
+    ## Convenciones (Fase 5)
+    - Versionado por **prefijo de ruta** (`/v1`).
+    - **Multi-tenant:** el `tenant_id` se deriva del JWT (claim), **nunca** del body o query.
+      A nivel de base se refuerza con Row Level Security (ADR-0008).
+    - **Idempotencia:** los POST que el móvil puede reintentar tras una caída aceptan la
+      cabecera `Idempotency-Key` (UUID generado en el dispositivo) para no duplicar.
+    - **Dinero** siempre en **COP** (enteros, sin decimales).
+    - Errores con esquema único `Problem` (RFC 7807-like).
+  contact:
+    name: Equipo FleetSpecial
+  license:
+    name: Propietaria
+    identifier: LicenseRef-Proprietary
+
+servers:
+  - url: https://api.fleetspecial.co/v1
+    description: Producción
+  - url: https://staging-api.fleetspecial.co/v1
+    description: QA / Staging
+  - url: http://localhost:3000/v1
+    description: Desarrollo local
+
+tags:
+  - name: Tenants
+    description: Onboarding y gestión de la Empresa (tenant). spec-001.
+  - name: Usuarios
+    description: Invitación, roles y ciclo de vida de usuarios. spec-002.
+  - name: Vehículos
+    description: Alta y gestión de vehículos; odómetro. spec-003.
+  - name: Conductores
+    description: Alta de conductores y licencia. spec-004.
+  - name: Documentos
+    description: Documentos, vencimientos y renovación (CORE). spec-005, spec-007.
+  - name: Catálogo
+    description: Catálogo configurable de Tipos de documento por tenant. spec-005 R2/R10.
+  - name: Cumplimiento
+    description: Semáforo y alertas de vencimiento (CORE). spec-006.
+  - name: Servicios
+    description: Servicios, asignaciones y ciclo de vida (CORE). spec-008, spec-009, spec-010.
+  - name: Combustible
+    description: Registro de tanqueo append-only (offline). spec-011.
+  - name: Mantenimiento
+    description: Programación y registro de mantenimiento. spec-012 (Draft).
+  - name: Sincronización
+    description: Pull/push para la app del conductor offline. spec-010, spec-011.
+
+security:
+  - bearerAuth: []
+
+paths:
+  # ───────────────────────── spec-001 Tenants ─────────────────────────
+  /tenants:
+    post:
+      tags: [Tenants]
+      summary: Registrar Empresa (Tenant) y primer Administrador
+      description: |
+        spec-001. Crea el tenant, su primer usuario Administrador y registra la
+        **aceptación del tratamiento de datos (Habeas Data)**. Crea por defecto una
+        Suscripción en plan Free (1 vehículo). Operación pública (no requiere JWT).
+      security: []
+      operationId: registrarTenant
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/RegistrarTenantRequest' }
+      responses:
+        '201':
+          description: Tenant y administrador creados.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/TenantCreado' }
+        '409':
+          description: Ya existe un tenant/administrador con ese identificador o correo.
+          content:
+            application/problem+json:
+              schema: { $ref: '#/components/schemas/Problem' }
+        '422':
+          $ref: '#/components/responses/ValidationError'
+
+  /tenants/me:
+    get:
+      tags: [Tenants]
+      summary: Datos del tenant actual
+      operationId: obtenerTenantActual
+      responses:
+        '200':
+          description: Tenant actual (derivado del JWT).
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Tenant' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+
+  # ───────────────────────── spec-002 Usuarios ─────────────────────────
+  /usuarios:
+    get:
+      tags: [Usuarios]
+      summary: Listar usuarios del tenant
+      operationId: listarUsuarios
+      parameters:
+        - $ref: '#/components/parameters/Page'
+        - $ref: '#/components/parameters/PageSize'
+      responses:
+        '200':
+          description: Página de usuarios.
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/Pagina'
+                  - type: object
+                    properties:
+                      items:
+                        type: array
+                        items: { $ref: '#/components/schemas/Usuario' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+    post:
+      tags: [Usuarios]
+      summary: Invitar un usuario y asignarle roles
+      description: spec-002. Solo Administrador. Emite el evento `UsuarioInvitado`.
+      operationId: invitarUsuario
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/InvitarUsuarioRequest' }
+      responses:
+        '201':
+          description: Usuario invitado (estado `invitado`).
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Usuario' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '409':
+          description: El correo ya pertenece a un usuario del tenant.
+          content:
+            application/problem+json:
+              schema: { $ref: '#/components/schemas/Problem' }
+        '422': { $ref: '#/components/responses/ValidationError' }
+
+  /usuarios/{usuarioId}:
+    parameters:
+      - $ref: '#/components/parameters/UsuarioId'
+    patch:
+      tags: [Usuarios]
+      summary: Actualizar roles o estado de un usuario
+      description: spec-002. Cambia roles o suspende/reactiva (Administrador).
+      operationId: actualizarUsuario
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/ActualizarUsuarioRequest' }
+      responses:
+        '200':
+          description: Usuario actualizado.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Usuario' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+
+  # ───────────────────────── spec-003 Vehículos ─────────────────────────
+  /vehiculos:
+    get:
+      tags: [Vehículos]
+      summary: Listar vehículos del tenant
+      operationId: listarVehiculos
+      parameters:
+        - $ref: '#/components/parameters/Page'
+        - $ref: '#/components/parameters/PageSize'
+      responses:
+        '200':
+          description: Página de vehículos.
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/Pagina'
+                  - type: object
+                    properties:
+                      items:
+                        type: array
+                        items: { $ref: '#/components/schemas/Vehiculo' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+    post:
+      tags: [Vehículos]
+      summary: Registrar un vehículo
+      description: |
+        spec-003. La **placa es única por tenant**. Emite `VehiculoRegistrado`.
+      operationId: registrarVehiculo
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/RegistrarVehiculoRequest' }
+      responses:
+        '201':
+          description: Vehículo creado.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Vehiculo' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '409':
+          description: Ya existe un vehículo con esa placa en el tenant.
+          content:
+            application/problem+json:
+              schema: { $ref: '#/components/schemas/Problem' }
+        '422': { $ref: '#/components/responses/ValidationError' }
+
+  /vehiculos/{vehiculoId}:
+    parameters:
+      - $ref: '#/components/parameters/VehiculoId'
+    get:
+      tags: [Vehículos]
+      summary: Obtener un vehículo
+      operationId: obtenerVehiculo
+      responses:
+        '200':
+          description: Vehículo.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Vehiculo' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '404': { $ref: '#/components/responses/NotFound' }
+    patch:
+      tags: [Vehículos]
+      summary: Actualizar datos básicos del vehículo
+      operationId: actualizarVehiculo
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/ActualizarVehiculoRequest' }
+      responses:
+        '200':
+          description: Vehículo actualizado.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Vehiculo' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '404': { $ref: '#/components/responses/NotFound' }
+
+  /vehiculos/{vehiculoId}/odometro:
+    parameters:
+      - $ref: '#/components/parameters/VehiculoId'
+    post:
+      tags: [Vehículos]
+      summary: Registrar una lectura de odómetro
+      description: |
+        spec-003. El odómetro es **monótonamente creciente**: una lectura menor a la
+        última registrada se rechaza (422). Emite `OdometroActualizado`.
+      operationId: registrarOdometro
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/RegistrarOdometroRequest' }
+      responses:
+        '201':
+          description: Lectura registrada.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/LecturaOdometro' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '422':
+          description: La lectura es menor que la última registrada (viola monotonía).
+          content:
+            application/problem+json:
+              schema: { $ref: '#/components/schemas/Problem' }
+
+  # ───────────────────────── spec-004 Conductores ─────────────────────────
+  /conductores:
+    get:
+      tags: [Conductores]
+      summary: Listar conductores del tenant
+      operationId: listarConductores
+      parameters:
+        - $ref: '#/components/parameters/Page'
+        - $ref: '#/components/parameters/PageSize'
+      responses:
+        '200':
+          description: Página de conductores.
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/Pagina'
+                  - type: object
+                    properties:
+                      items:
+                        type: array
+                        items: { $ref: '#/components/schemas/Conductor' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+    post:
+      tags: [Conductores]
+      summary: Registrar un conductor y su licencia
+      description: spec-004. Emite `ConductorRegistrado`. Minimización de datos (Habeas Data).
+      operationId: registrarConductor
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/RegistrarConductorRequest' }
+      responses:
+        '201':
+          description: Conductor creado.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Conductor' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '422': { $ref: '#/components/responses/ValidationError' }
+
+  /conductores/{conductorId}:
+    parameters:
+      - $ref: '#/components/parameters/ConductorId'
+    get:
+      tags: [Conductores]
+      summary: Obtener un conductor
+      operationId: obtenerConductor
+      responses:
+        '200':
+          description: Conductor.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Conductor' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '404': { $ref: '#/components/responses/NotFound' }
+
+  # ───────────────── spec-005 R2/R10 Catálogo de Tipos de documento ─────────────────
+  /catalogo/tipos:
+    get:
+      tags: [Catálogo]
+      summary: Listar los Tipos de documento del tenant
+      operationId: listarTiposDocumento
+      responses:
+        '200':
+          description: Tipos del catálogo (activos e inactivos).
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: '#/components/schemas/TipoDocumentoCatalogo' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+    post:
+      tags: [Catálogo]
+      summary: Agregar un Tipo de documento al catálogo
+      description: |
+        spec-005 R2/R10. El catálogo es configurable por tenant sin redeploy:
+        cambios normativos se resuelven agregando o desactivando Tipos.
+      operationId: agregarTipoDocumento
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/AgregarTipoDocumentoRequest' }
+      responses:
+        '201':
+          description: Tipo agregado.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/TipoDocumentoCatalogo' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '409':
+          description: Ya existe un Tipo con ese código en el tenant.
+          content:
+            application/problem+json:
+              schema: { $ref: '#/components/schemas/Problem' }
+        '422': { $ref: '#/components/responses/ValidationError' }
+
+  /catalogo/tipos/{codigo}:
+    parameters:
+      - name: codigo
+        in: path
+        required: true
+        schema: { type: string }
+    patch:
+      tags: [Catálogo]
+      summary: Actualizar un Tipo (activar/desactivar, requerido)
+      description: |
+        spec-005 R10. Desactivar un Tipo impide registrar nuevos Documentos de ese
+        Tipo sin afectar los existentes. `requerido` alimenta la invariante I3
+        (requerido ausente ⇒ Semáforo rojo).
+      operationId: actualizarTipoDocumento
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/ActualizarTipoDocumentoRequest' }
+      responses:
+        '200':
+          description: Tipo actualizado.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/TipoDocumentoCatalogo' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '404': { $ref: '#/components/responses/NotFound' }
+
+  # ───────────────────────── spec-005 / 007 Documentos ─────────────────────────
+  /documentos:
+    get:
+      tags: [Documentos]
+      summary: Listar documentos (filtrable por sujeto)
+      operationId: listarDocumentos
+      parameters:
+        - name: sujetoTipo
+          in: query
+          schema: { type: string, enum: [vehiculo, conductor] }
+        - name: sujetoId
+          in: query
+          schema: { type: string, format: uuid }
+        - $ref: '#/components/parameters/Page'
+        - $ref: '#/components/parameters/PageSize'
+      responses:
+        '200':
+          description: Página de documentos.
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/Pagina'
+                  - type: object
+                    properties:
+                      items:
+                        type: array
+                        items: { $ref: '#/components/schemas/Documento' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+    post:
+      tags: [Documentos]
+      summary: Registrar un documento con vencimiento
+      description: |
+        spec-005. Asocia un Documento a un Vehículo o Conductor con su fecha de
+        vencimiento. El binario del adjunto se sube por separado vía
+        `POST /documentos/{id}/adjunto`. Emite `DocumentoRegistrado`.
+      operationId: registrarDocumento
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/RegistrarDocumentoRequest' }
+      responses:
+        '201':
+          description: Documento creado.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Documento' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '422': { $ref: '#/components/responses/ValidationError' }
+
+  /documentos/{documentoId}:
+    parameters:
+      - $ref: '#/components/parameters/DocumentoId'
+    get:
+      tags: [Documentos]
+      summary: Obtener un documento (con histórico de versiones)
+      operationId: obtenerDocumento
+      responses:
+        '200':
+          description: Documento.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Documento' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '404': { $ref: '#/components/responses/NotFound' }
+
+  /documentos/{documentoId}/adjunto:
+    parameters:
+      - $ref: '#/components/parameters/DocumentoId'
+    put:
+      tags: [Documentos]
+      summary: Subir/reemplazar el archivo adjunto del documento
+      description: spec-005. Almacenamiento aislado por tenant.
+      operationId: subirAdjuntoDocumento
+      requestBody:
+        required: true
+        content:
+          application/octet-stream:
+            schema: { type: string, format: binary }
+      responses:
+        '204': { description: Adjunto almacenado. }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '413':
+          description: Archivo demasiado grande.
+          content:
+            application/problem+json:
+              schema: { $ref: '#/components/schemas/Problem' }
+
+  /documentos/{documentoId}/renovaciones:
+    parameters:
+      - $ref: '#/components/parameters/DocumentoId'
+    post:
+      tags: [Documentos]
+      summary: Renovar un documento conservando histórico
+      description: |
+        spec-007. Crea una nueva versión vigente y conserva la anterior en el histórico.
+        Emite `DocumentoRenovado`; si el sujeto vuelve a estar al día, rehabilita
+        asignaciones (política P5).
+      operationId: renovarDocumento
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/RenovarDocumentoRequest' }
+      responses:
+        '201':
+          description: Documento renovado (nueva versión vigente).
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Documento' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '422': { $ref: '#/components/responses/ValidationError' }
+
+  # ───────────────────────── spec-006 Cumplimiento / Semáforo ─────────────────────────
+  /cumplimiento/vehiculos/{vehiculoId}:
+    parameters:
+      - $ref: '#/components/parameters/VehiculoId'
+    get:
+      tags: [Cumplimiento]
+      summary: Estado de cumplimiento (Semáforo) de un vehículo
+      description: spec-006. Devuelve el Semáforo y el detalle por documento.
+      operationId: cumplimientoVehiculo
+      responses:
+        '200':
+          description: Estado de cumplimiento.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/EstadoCumplimiento' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '404': { $ref: '#/components/responses/NotFound' }
+
+  /cumplimiento/conductores/{conductorId}:
+    parameters:
+      - $ref: '#/components/parameters/ConductorId'
+    get:
+      tags: [Cumplimiento]
+      summary: Estado de cumplimiento (Semáforo) de un conductor
+      operationId: cumplimientoConductor
+      responses:
+        '200':
+          description: Estado de cumplimiento.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/EstadoCumplimiento' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '404': { $ref: '#/components/responses/NotFound' }
+
+  /cumplimiento/alertas:
+    get:
+      tags: [Cumplimiento]
+      summary: Listar alertas de vencimiento vigentes
+      description: |
+        spec-006. Documentos por vencer (30/15/3 días) y vencidos del tenant.
+        Alimenta el tablero de alertas del portal.
+      operationId: listarAlertas
+      parameters:
+        - name: estado
+          in: query
+          schema: { type: string, enum: [por_vencer, vencido] }
+        - $ref: '#/components/parameters/Page'
+        - $ref: '#/components/parameters/PageSize'
+      responses:
+        '200':
+          description: Página de alertas.
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/Pagina'
+                  - type: object
+                    properties:
+                      items:
+                        type: array
+                        items: { $ref: '#/components/schemas/Alerta' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+
+  # ───────────────────────── spec-008 / 009 / 010 Servicios ─────────────────────────
+  /servicios:
+    get:
+      tags: [Servicios]
+      summary: Listar servicios (agenda)
+      operationId: listarServicios
+      parameters:
+        - name: desde
+          in: query
+          schema: { type: string, format: date-time }
+        - name: hasta
+          in: query
+          schema: { type: string, format: date-time }
+        - name: estado
+          in: query
+          schema: { $ref: '#/components/schemas/EstadoServicio' }
+        - $ref: '#/components/parameters/Page'
+        - $ref: '#/components/parameters/PageSize'
+      responses:
+        '200':
+          description: Página de servicios.
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/Pagina'
+                  - type: object
+                    properties:
+                      items:
+                        type: array
+                        items: { $ref: '#/components/schemas/Servicio' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+    post:
+      tags: [Servicios]
+      summary: Crear un servicio
+      description: spec-008. Origen, destino, ventana horaria y cliente.
+      operationId: crearServicio
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/CrearServicioRequest' }
+      responses:
+        '201':
+          description: Servicio creado (estado Planificado).
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Servicio' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '422': { $ref: '#/components/responses/ValidationError' }
+
+  /servicios/{servicioId}/asignacion:
+    parameters:
+      - $ref: '#/components/parameters/ServicioId'
+    put:
+      tags: [Servicios]
+      summary: Asignar vehículo + conductor a un servicio
+      description: |
+        spec-008 + spec-009 (**regla de oro**). Valida que no haya **choque de ventana
+        horaria** (409 `conflicto_horario`) y que el vehículo y el conductor estén
+        **al día documentalmente** (consulta ACL a Cumplimiento):
+        - Semáforo **rojo** ⇒ se rechaza con `409 incumplimiento` (emite `AsignacionRechazada`).
+        - Semáforo **amarillo** ⇒ se permite pero la respuesta incluye `advertencias`.
+        En éxito emite `ServicioAsignado`.
+      operationId: asignarServicio
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/AsignarServicioRequest' }
+      responses:
+        '200':
+          description: Asignación creada (puede incluir advertencias por semáforo amarillo).
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Asignacion' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409':
+          description: |
+            Conflicto. `type` indica el motivo: `conflicto_horario` (solapamiento) o
+            `incumplimiento` (semáforo rojo, regla de oro — spec-009).
+          content:
+            application/problem+json:
+              schema: { $ref: '#/components/schemas/Problem' }
+
+  /servicios/{servicioId}/estado:
+    parameters:
+      - $ref: '#/components/parameters/ServicioId'
+    post:
+      tags: [Servicios]
+      summary: Cambiar el estado del servicio (iniciar/finalizar/cancelar)
+      description: |
+        spec-010. Transiciones válidas: `Planificado→Iniciado→Finalizado` o
+        `Planificado→Cancelado` (invariante S2). El conductor puede ejecutarlo **offline**
+        y sincronizarlo después; por eso acepta `Idempotency-Key` y marca de tiempo del
+        cliente. Emite `ServicioIniciado` / `ServicioFinalizado`.
+      operationId: cambiarEstadoServicio
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/CambiarEstadoServicioRequest' }
+      responses:
+        '200':
+          description: Estado actualizado.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Servicio' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409':
+          description: Transición de estado inválida (viola invariante S2).
+          content:
+            application/problem+json:
+              schema: { $ref: '#/components/schemas/Problem' }
+
+  /servicios/{servicioId}/novedades:
+    parameters:
+      - $ref: '#/components/parameters/ServicioId'
+    post:
+      tags: [Servicios]
+      summary: Reportar una novedad del servicio (offline, append-only)
+      description: |
+        spec-014 (Draft). Incidente/retraso, opcionalmente con foto (subida aparte).
+        Append-only e idempotente. Emite `NovedadReportada`.
+      operationId: reportarNovedad
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/ReportarNovedadRequest' }
+      responses:
+        '201':
+          description: Novedad registrada.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Novedad' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '404': { $ref: '#/components/responses/NotFound' }
+
+  # ───────────────────────── spec-011 Combustible ─────────────────────────
+  /combustible:
+    get:
+      tags: [Combustible]
+      summary: Listar tanqueos
+      operationId: listarTanqueos
+      parameters:
+        - name: vehiculoId
+          in: query
+          schema: { type: string, format: uuid }
+        - $ref: '#/components/parameters/Page'
+        - $ref: '#/components/parameters/PageSize'
+      responses:
+        '200':
+          description: Página de tanqueos.
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/Pagina'
+                  - type: object
+                    properties:
+                      items:
+                        type: array
+                        items: { $ref: '#/components/schemas/Tanqueo' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+    post:
+      tags: [Combustible]
+      summary: Registrar un tanqueo (offline, append-only, idempotente)
+      description: |
+        spec-011. El cliente genera un UUID y lo envía en `Idempotency-Key`; el servidor
+        **deduplica** para que los reintentos de sync no creen registros duplicados.
+        Incluye la lectura de odómetro (actualiza el vehículo). Emite `CombustibleRegistrado`.
+      operationId: registrarTanqueo
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/RegistrarTanqueoRequest' }
+      responses:
+        '201':
+          description: Tanqueo registrado.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Tanqueo' }
+        '200':
+          description: |
+            Reintento idempotente: ya existía un tanqueo con ese `Idempotency-Key`.
+            Se devuelve el registro existente sin crear uno nuevo.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Tanqueo' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '422': { $ref: '#/components/responses/ValidationError' }
+
+  # ───────────────────────── spec-010/011 Sincronización ─────────────────────────
+  /sync/pull:
+    get:
+      tags: [Sincronización]
+      summary: Descargar cambios del servidor desde un cursor
+      description: |
+        spec-010. Delta sync para la app del conductor: agenda, documentos (semáforo) y
+        datos de vehículo modificados desde `cursor`. Devuelve un nuevo `cursor` opaco
+        para la siguiente sincronización.
+      operationId: syncPull
+      parameters:
+        - name: cursor
+          in: query
+          description: Cursor opaco de la última sincronización. Ausente = bootstrap inicial.
+          schema: { type: string }
+        - name: limit
+          in: query
+          schema: { type: integer, minimum: 1, maximum: 500, default: 200 }
+      responses:
+        '200':
+          description: Lote de cambios + cursor siguiente.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/SyncPullResponse' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+
+  /sync/push:
+    post:
+      tags: [Sincronización]
+      summary: Subir un lote de cambios generados offline
+      description: |
+        spec-010/011. Envía la cola de cambios del dispositivo (tanqueos, novedades,
+        cambios de estado de servicio). Cada cambio lleva su `clientId` (UUID) para
+        **deduplicación idempotente**. La respuesta indica el resultado por cambio,
+        incluyendo conflictos a resolver.
+      operationId: syncPush
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/SyncPushRequest' }
+      responses:
+        '200':
+          description: Resultado por cada cambio del lote.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/SyncPushResponse' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '422': { $ref: '#/components/responses/ValidationError' }
+
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+      description: |
+        JWT OIDC. El token incluye el claim `tenant_id` y los `roles`. El servidor
+        deriva el tenant del token (nunca del body/query) y lo fija en la sesión de
+        base de datos para que Row Level Security aísle los datos (ADR-0008).
+
+  parameters:
+    Page:
+      name: page
+      in: query
+      schema: { type: integer, minimum: 1, default: 1 }
+    PageSize:
+      name: pageSize
+      in: query
+      schema: { type: integer, minimum: 1, maximum: 100, default: 20 }
+    IdempotencyKey:
+      name: Idempotency-Key
+      in: header
+      required: false
+      description: UUID generado por el cliente para deduplicar reintentos (offline).
+      schema: { type: string, format: uuid }
+    UsuarioId:
+      name: usuarioId
+      in: path
+      required: true
+      schema: { type: string, format: uuid }
+    VehiculoId:
+      name: vehiculoId
+      in: path
+      required: true
+      schema: { type: string, format: uuid }
+    ConductorId:
+      name: conductorId
+      in: path
+      required: true
+      schema: { type: string, format: uuid }
+    DocumentoId:
+      name: documentoId
+      in: path
+      required: true
+      schema: { type: string, format: uuid }
+    ServicioId:
+      name: servicioId
+      in: path
+      required: true
+      schema: { type: string, format: uuid }
+
+  responses:
+    Unauthorized:
+      description: Falta o es inválido el token de autenticación.
+      content:
+        application/problem+json:
+          schema: { $ref: '#/components/schemas/Problem' }
+    Forbidden:
+      description: El rol del usuario no permite esta operación (RBAC).
+      content:
+        application/problem+json:
+          schema: { $ref: '#/components/schemas/Problem' }
+    NotFound:
+      description: Recurso no encontrado en el tenant actual.
+      content:
+        application/problem+json:
+          schema: { $ref: '#/components/schemas/Problem' }
+    ValidationError:
+      description: Error de validación de la solicitud.
+      content:
+        application/problem+json:
+          schema: { $ref: '#/components/schemas/Problem' }
+
+  schemas:
+    # ---------- Comunes ----------
+    Problem:
+      type: object
+      description: Error con forma RFC 7807.
+      properties:
+        type: { type: string, description: 'Identificador del tipo de error (p. ej. conflicto_horario, incumplimiento).' }
+        title: { type: string }
+        status: { type: integer }
+        detail: { type: string }
+        instance: { type: string }
+        errors:
+          type: array
+          description: Detalle de errores de validación por campo.
+          items:
+            type: object
+            properties:
+              campo: { type: string }
+              mensaje: { type: string }
+      required: [title, status]
+
+    Pagina:
+      type: object
+      properties:
+        page: { type: integer }
+        pageSize: { type: integer }
+        total: { type: integer }
+      required: [page, pageSize, total]
+
+    Money:
+      type: object
+      description: Monto monetario en COP (entero, sin decimales).
+      properties:
+        moneda: { type: string, enum: [COP], default: COP }
+        valor: { type: integer, description: Monto en pesos colombianos. }
+      required: [moneda, valor]
+
+    Semaforo:
+      type: string
+      description: Estado de cumplimiento. Verde/Amarillo/Rojo.
+      enum: [Vigente, PorVencer, Vencido]
+
+    SujetoRef:
+      type: object
+      description: Referencia polimórfica a un Vehículo o Conductor.
+      properties:
+        tipo: { type: string, enum: [vehiculo, conductor] }
+        id: { type: string, format: uuid }
+      required: [tipo, id]
+
+    # ---------- Tenant / Usuario ----------
+    RegistrarTenantRequest:
+      type: object
+      properties:
+        empresa:
+          type: object
+          properties:
+            razonSocial: { type: string }
+            nit: { type: string }
+          required: [razonSocial, nit]
+        administrador:
+          type: object
+          properties:
+            nombre: { type: string }
+            correo: { type: string, format: email }
+          required: [nombre, correo]
+        aceptaTratamientoDatos:
+          type: boolean
+          description: Consentimiento Habeas Data (Ley 1581/2012). Debe ser true.
+      required: [empresa, administrador, aceptaTratamientoDatos]
+
+    TenantCreado:
+      type: object
+      properties:
+        tenant: { $ref: '#/components/schemas/Tenant' }
+        administrador: { $ref: '#/components/schemas/Usuario' }
+
+    Tenant:
+      type: object
+      properties:
+        id: { type: string, format: uuid }
+        razonSocial: { type: string }
+        nit: { type: string }
+        plan: { type: string, enum: [Free, Starter, Pro, Enterprise] }
+        creadoEn: { type: string, format: date-time }
+      required: [id, razonSocial, nit, plan]
+
+    RolUsuario:
+      type: string
+      enum: [Administrador, Operador, GestorPlanilla, RepresentanteLegal, DuenoVehiculo, Conductor]
+
+    InvitarUsuarioRequest:
+      type: object
+      properties:
+        nombre: { type: string }
+        correo: { type: string, format: email }
+        roles:
+          type: array
+          items: { $ref: '#/components/schemas/RolUsuario' }
+          minItems: 1
+      required: [nombre, correo, roles]
+
+    ActualizarUsuarioRequest:
+      type: object
+      properties:
+        roles:
+          type: array
+          items: { $ref: '#/components/schemas/RolUsuario' }
+        estado: { type: string, enum: [activo, suspendido] }
+
+    Usuario:
+      type: object
+      properties:
+        id: { type: string, format: uuid }
+        nombre: { type: string }
+        correo: { type: string, format: email }
+        roles:
+          type: array
+          items: { $ref: '#/components/schemas/RolUsuario' }
+        estado: { type: string, enum: [invitado, activo, suspendido] }
+      required: [id, nombre, correo, roles, estado]
+
+    # ---------- Vehículo ----------
+    ClaseVehiculo:
+      type: string
+      enum: [automovil, camioneta, van, microbus, bus, campero, otro]
+
+    RegistrarVehiculoRequest:
+      type: object
+      properties:
+        placa: { type: string, description: 'Placa colombiana, p. ej. ABC123. Única por tenant.', pattern: '^[A-Z]{3}[0-9]{2,3}$' }
+        clase: { $ref: '#/components/schemas/ClaseVehiculo' }
+        marca: { type: string }
+        modelo: { type: string }
+        anio: { type: integer, minimum: 1950, maximum: 2100 }
+        propietarioId: { type: string, format: uuid, description: Opcional. Referencia al propietario. }
+        odometroInicial: { type: integer, minimum: 0 }
+      required: [placa, clase]
+
+    ActualizarVehiculoRequest:
+      type: object
+      properties:
+        marca: { type: string }
+        modelo: { type: string }
+        anio: { type: integer }
+        propietarioId: { type: string, format: uuid }
+        estado: { type: string, enum: [activo, inactivo] }
+
+    Vehiculo:
+      type: object
+      properties:
+        id: { type: string, format: uuid }
+        placa: { type: string }
+        clase: { $ref: '#/components/schemas/ClaseVehiculo' }
+        marca: { type: string }
+        modelo: { type: string }
+        anio: { type: integer }
+        odometro: { type: integer, description: Última lectura conocida. }
+        semaforo: { $ref: '#/components/schemas/Semaforo' }
+        estado: { type: string, enum: [activo, inactivo] }
+      required: [id, placa, clase, estado]
+
+    RegistrarOdometroRequest:
+      type: object
+      properties:
+        lectura: { type: integer, minimum: 0 }
+        fuente: { type: string, enum: [manual, tanqueo, servicio] }
+        registradoEn: { type: string, format: date-time }
+      required: [lectura, fuente]
+
+    LecturaOdometro:
+      type: object
+      properties:
+        id: { type: string, format: uuid }
+        vehiculoId: { type: string, format: uuid }
+        lectura: { type: integer }
+        fuente: { type: string }
+        registradoEn: { type: string, format: date-time }
+      required: [id, vehiculoId, lectura]
+
+    # ---------- Conductor ----------
+    RegistrarConductorRequest:
+      type: object
+      properties:
+        nombre: { type: string }
+        documentoIdentidad: { type: string }
+        usuarioId: { type: string, format: uuid, description: 'Opcional: vínculo con el Usuario que usa la app.' }
+        licencia:
+          type: object
+          properties:
+            numero: { type: string }
+            categoria: { type: string, description: 'Categoría de licencia, p. ej. C1.' }
+            vencimiento: { type: string, format: date }
+          required: [numero, categoria, vencimiento]
+      required: [nombre, documentoIdentidad, licencia]
+
+    Conductor:
+      type: object
+      properties:
+        id: { type: string, format: uuid }
+        nombre: { type: string }
+        usuarioId: { type: string, format: uuid }
+        licencia:
+          type: object
+          properties:
+            numero: { type: string }
+            categoria: { type: string }
+            vencimiento: { type: string, format: date }
+        semaforo: { $ref: '#/components/schemas/Semaforo' }
+      required: [id, nombre]
+
+    # ---------- Catálogo de Tipos (spec-005 R2/R10) ----------
+    TipoDocumentoCatalogo:
+      type: object
+      properties:
+        codigo: { type: string, description: 'P. ej. SOAT, RTM, LICENCIA.' }
+        aplicaA: { type: string, enum: [vehiculo, conductor] }
+        requerido: { type: boolean, description: 'Alimenta la invariante I3 (ausente ⇒ rojo).' }
+        activo: { type: boolean }
+      required: [codigo, aplicaA, requerido, activo]
+
+    AgregarTipoDocumentoRequest:
+      type: object
+      properties:
+        codigo: { type: string }
+        aplicaA: { type: string, enum: [vehiculo, conductor] }
+        requerido: { type: boolean, default: false }
+      required: [codigo, aplicaA]
+
+    ActualizarTipoDocumentoRequest:
+      type: object
+      description: Campos opcionales; solo se actualiza lo enviado.
+      properties:
+        activo: { type: boolean }
+        requerido: { type: boolean }
+
+    # ---------- Documento ----------
+    RegistrarDocumentoRequest:
+      type: object
+      properties:
+        sujeto: { $ref: '#/components/schemas/SujetoRef' }
+        tipo: { type: string, description: 'Código del Tipo de documento (catálogo configurable): SOAT, RTM, TARJETA_OPERACION, LICENCIA, EXAMEN_MEDICO, POLIZA_CONTRACTUAL, POLIZA_EXTRACONTRACTUAL, etc.' }
+        numero: { type: string }
+        expedicion: { type: string, format: date }
+        vencimiento: { type: string, format: date }
+      required: [sujeto, tipo, vencimiento]
+
+    RenovarDocumentoRequest:
+      type: object
+      properties:
+        numero: { type: string }
+        expedicion: { type: string, format: date }
+        vencimiento: { type: string, format: date }
+      required: [vencimiento]
+
+    Documento:
+      type: object
+      properties:
+        id: { type: string, format: uuid }
+        sujeto: { $ref: '#/components/schemas/SujetoRef' }
+        tipo: { type: string }
+        numero: { type: string }
+        expedicion: { type: string, format: date }
+        vencimiento: { type: string, format: date }
+        estado: { $ref: '#/components/schemas/Semaforo' }
+        tieneAdjunto: { type: boolean }
+        version: { type: integer, description: Número de versión (renovaciones). }
+        historico:
+          type: array
+          description: Versiones anteriores (renovaciones).
+          items:
+            type: object
+            properties:
+              version: { type: integer }
+              vencimiento: { type: string, format: date }
+              reemplazadoEn: { type: string, format: date-time }
+      required: [id, sujeto, tipo, vencimiento, estado]
+
+    # ---------- Cumplimiento ----------
+    EstadoCumplimiento:
+      type: object
+      properties:
+        sujeto: { $ref: '#/components/schemas/SujetoRef' }
+        semaforo: { $ref: '#/components/schemas/Semaforo' }
+        documentos:
+          type: array
+          items:
+            type: object
+            properties:
+              documentoId: { type: string, format: uuid }
+              tipo: { type: string }
+              vencimiento: { type: string, format: date }
+              estado: { $ref: '#/components/schemas/Semaforo' }
+              diasRestantes: { type: integer }
+      required: [sujeto, semaforo]
+
+    Alerta:
+      type: object
+      properties:
+        documentoId: { type: string, format: uuid }
+        sujeto: { $ref: '#/components/schemas/SujetoRef' }
+        tipo: { type: string }
+        estado: { type: string, enum: [por_vencer, vencido] }
+        vencimiento: { type: string, format: date }
+        diasRestantes: { type: integer, description: 'Negativo si ya venció.' }
+      required: [documentoId, sujeto, estado, vencimiento]
+
+    # ---------- Servicio ----------
+    EstadoServicio:
+      type: string
+      enum: [Planificado, Iniciado, Finalizado, Cancelado]
+
+    VentanaHoraria:
+      type: object
+      properties:
+        inicio: { type: string, format: date-time }
+        fin: { type: string, format: date-time }
+      required: [inicio, fin]
+
+    CrearServicioRequest:
+      type: object
+      properties:
+        origen: { type: string }
+        destino: { type: string }
+        ventana: { $ref: '#/components/schemas/VentanaHoraria' }
+        cliente: { type: string }
+      required: [origen, destino, ventana]
+
+    AsignarServicioRequest:
+      type: object
+      properties:
+        vehiculoId: { type: string, format: uuid }
+        conductorId: { type: string, format: uuid }
+      required: [vehiculoId, conductorId]
+
+    CambiarEstadoServicioRequest:
+      type: object
+      properties:
+        accion: { type: string, enum: [iniciar, finalizar, cancelar] }
+        ocurridoEn: { type: string, format: date-time, description: 'Marca de tiempo del cliente (puede ser offline).' }
+        odometro: { type: integer, description: 'Lectura al iniciar/finalizar, si aplica.' }
+        clientId: { type: string, format: uuid, description: 'UUID del cambio para idempotencia.' }
+      required: [accion]
+
+    Asignacion:
+      type: object
+      properties:
+        servicioId: { type: string, format: uuid }
+        vehiculoId: { type: string, format: uuid }
+        conductorId: { type: string, format: uuid }
+        advertencias:
+          type: array
+          description: 'Advertencias no bloqueantes (p. ej. semáforo amarillo — spec-009).'
+          items: { type: string }
+      required: [servicioId, vehiculoId, conductorId]
+
+    Servicio:
+      type: object
+      properties:
+        id: { type: string, format: uuid }
+        origen: { type: string }
+        destino: { type: string }
+        ventana: { $ref: '#/components/schemas/VentanaHoraria' }
+        cliente: { type: string }
+        estado: { $ref: '#/components/schemas/EstadoServicio' }
+        asignacion: { $ref: '#/components/schemas/Asignacion' }
+        inicioReal: { type: string, format: date-time }
+        finReal: { type: string, format: date-time }
+      required: [id, origen, destino, ventana, estado]
+
+    ReportarNovedadRequest:
+      type: object
+      properties:
+        tipo: { type: string, enum: [incidente, retraso, siniestro, otro] }
+        descripcion: { type: string }
+        ocurridoEn: { type: string, format: date-time }
+        clientId: { type: string, format: uuid }
+        tieneFoto: { type: boolean }
+      required: [tipo, ocurridoEn, clientId]
+
+    Novedad:
+      type: object
+      properties:
+        id: { type: string, format: uuid }
+        servicioId: { type: string, format: uuid }
+        tipo: { type: string }
+        descripcion: { type: string }
+        ocurridoEn: { type: string, format: date-time }
+        tieneFoto: { type: boolean }
+      required: [id, servicioId, tipo, ocurridoEn]
+
+    # ---------- Combustible ----------
+    RegistrarTanqueoRequest:
+      type: object
+      properties:
+        vehiculoId: { type: string, format: uuid }
+        litros: { type: number, minimum: 0, description: 'Litros o galones según configuración del tenant.' }
+        valor: { $ref: '#/components/schemas/Money' }
+        odometro: { type: integer, minimum: 0 }
+        tanqueadoEn: { type: string, format: date-time }
+        clientId: { type: string, format: uuid, description: 'UUID del cambio para idempotencia (append-only).' }
+      required: [vehiculoId, litros, valor, odometro, clientId]
+
+    Tanqueo:
+      type: object
+      properties:
+        id: { type: string, format: uuid }
+        vehiculoId: { type: string, format: uuid }
+        litros: { type: number }
+        valor: { $ref: '#/components/schemas/Money' }
+        odometro: { type: integer }
+        tanqueadoEn: { type: string, format: date-time }
+      required: [id, vehiculoId, litros, valor, odometro]
+
+    # ---------- Sync ----------
+    SyncPullResponse:
+      type: object
+      properties:
+        cursor: { type: string, description: Cursor para la próxima sincronización. }
+        servicios:
+          type: array
+          items: { $ref: '#/components/schemas/Servicio' }
+        documentos:
+          type: array
+          items: { $ref: '#/components/schemas/Documento' }
+        vehiculos:
+          type: array
+          items: { $ref: '#/components/schemas/Vehiculo' }
+      required: [cursor]
+
+    SyncCambio:
+      type: object
+      description: Un cambio generado offline en el dispositivo.
+      properties:
+        clientId: { type: string, format: uuid, description: UUID idempotente del cambio. }
+        entidad: { type: string, enum: [tanqueo, novedad, estado_servicio] }
+        operacion: { type: string, enum: [crear, actualizar] }
+        payload:
+          type: object
+          additionalProperties: true
+          description: Cuerpo del cambio (forma según la entidad).
+        ocurridoEn: { type: string, format: date-time }
+      required: [clientId, entidad, operacion, payload]
+
+    SyncPushRequest:
+      type: object
+      properties:
+        cambios:
+          type: array
+          items: { $ref: '#/components/schemas/SyncCambio' }
+          minItems: 1
+      required: [cambios]
+
+    SyncPushResultado:
+      type: object
+      properties:
+        clientId: { type: string, format: uuid }
+        resultado: { type: string, enum: [confirmado, duplicado, conflicto, error] }
+        serverId: { type: string, format: uuid, description: Id asignado por el servidor (si se creó). }
+        version: { type: integer }
+        problema: { $ref: '#/components/schemas/Problem' }
+      required: [clientId, resultado]
+
+    SyncPushResponse:
+      type: object
+      properties:
+        resultados:
+          type: array
+          items:
+            $ref: '#/components/schemas/SyncPushResultado'
+      required: [resultados]
+
