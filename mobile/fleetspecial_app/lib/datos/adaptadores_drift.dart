@@ -209,7 +209,8 @@ class EstadoSyncDrift implements nucleo.EstadoSync {
     final actual = await _fila();
     await db.into(db.syncEstado).insertOnConflictUpdate(
           SyncEstadoCompanion.insert(
-            id: _filaUnica,
+            // PK entera única = alias de rowid para Drift ⇒ opcional (Value).
+            id: const Value(_filaUnica),
             cursor: Value(cursor),
             ultimaSyncMs: Value(actual?.ultimaSyncMs),
           ),
@@ -224,7 +225,7 @@ class EstadoSyncDrift implements nucleo.EstadoSync {
     final actual = await _fila();
     await db.into(db.syncEstado).insertOnConflictUpdate(
           SyncEstadoCompanion.insert(
-            id: _filaUnica,
+            id: const Value(_filaUnica),
             cursor: Value(actual?.cursor),
             ultimaSyncMs: Value(epochMs),
           ),
