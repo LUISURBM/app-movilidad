@@ -32,6 +32,9 @@ dependencies:
   http: ^1.2.0
   connectivity_plus: ^6.0.0
 
+  # Configuración del dispositivo (URL del servidor + token del conductor).
+  shared_preferences: ^2.2.0
+
 dev_dependencies:
   flutter_test:
     sdk: flutter

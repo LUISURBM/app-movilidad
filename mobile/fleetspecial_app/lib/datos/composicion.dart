@@ -2,6 +2,7 @@
 /// los adaptadores reales. La UI (fase 2b) solo consume [CapaDatos].
 library;
 
+import 'package:connectivity_plus/connectivity_plus.dart';
 import 'package:drift/drift.dart';
 import 'package:drift_flutter/drift_flutter.dart';
 import 'package:sync_core/sync_core.dart' as nucleo;
@@ -46,7 +47,9 @@ class CapaDatos {
     );
   }
 
-  /// Fábrica para pruebas: base en memoria y API inyectable.
+  /// Fábrica para pruebas: base en memoria, API inyectable y SIN plugin de
+  /// conectividad (stream vacío) para que los widget tests no toquen canales
+  /// nativos.
   factory CapaDatos.enMemoria({
     required QueryExecutor executor,
     required nucleo.SyncApi api,
@@ -58,6 +61,7 @@ class CapaDatos {
       api: api,
       tenantId: tenantId,
       reloj: reloj,
+      conectividad: const Stream<List<ConnectivityResult>>.empty(),
     );
   }
 
@@ -66,6 +70,7 @@ class CapaDatos {
     required nucleo.SyncApi api,
     required String tenantId,
     nucleo.Reloj reloj = const nucleo.RelojSistema(),
+    Stream<List<ConnectivityResult>>? conectividad,
   }) {
     final cola = ColaOutboxDrift(db);
     final espejo = EspejoLocalDrift(db);
@@ -91,7 +96,10 @@ class CapaDatos {
       estadoSync: estadoSync,
       acciones: acciones,
       sincronizador: sincronizador,
-      disparadores: DisparadoresSync(sincronizador: sincronizador),
+      disparadores: DisparadoresSync(
+        sincronizador: sincronizador,
+        conectividad: conectividad,
+      ),
     );
   }
 

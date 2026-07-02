@@ -10,7 +10,11 @@
 | Triggers (doc 06 §4.5) | `disparadores_sync.dart` | conectividad, periódico, manual, foreground — serializados |
 | Composición | `composicion.dart` | `CapaDatos.produccion(...)` / `.enMemoria(...)`; captura atómica (§6.1) vía transacción |
 
-La **UI ("mi día", iniciar/finalizar) llega en la fase 2b** sobre `CapaDatos`.
+**Fase 2b (incluida): UI demo-ready.** `main.dart` (configuración URL/token con
+shared_preferences) + `ui/mi_dia_screen.dart`: semáforo del vehículo, banner de
+frescura "datos de hace N min", tarjetas de servicio con Iniciar/Finalizar
+(diálogo de odómetro), pull-to-refresh y badges de cola ("N por subir" / "en
+conflicto"). Guion completo del demo: [docs/DEMO-APK.md](../../docs/DEMO-APK.md).
 
 ## Primer uso en tu máquina
 
