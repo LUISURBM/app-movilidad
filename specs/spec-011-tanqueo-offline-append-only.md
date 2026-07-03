@@ -2,7 +2,7 @@
 
 - **Bounded Context:** BC-6 Fuel Management — operación offline-first
 - **Prioridad:** MVP
-- **Estado:** Approved
+- **Estado:** Implemented
 - **Aprobada por:** Luis (Product Manager + dominio) · 2026-06-25
 - **Specs relacionadas:** spec-003 (Vehículo, Odómetro), spec-010 (operación offline), spec-012 (Mantenimiento por umbral)
 
@@ -111,3 +111,26 @@ Característica: Registrar Tanqueo de combustible offline, append-only e idempot
     Entonces el registro se rechaza localmente
     Y se informa que el valor en COP debe ser positivo
 ```
+
+## Notas de implementación (2026-07-02)
+
+Implementada en `backend/src/modules/fuel-management` (BC-6), en Clean Architecture,
+integrada al lote offline de spec-010 (ACL `TanqueoAcl` → `RegistrarTanqueo`) y expuesta
+en REST `POST/GET /combustible`. Suite verde: pruebas unitarias derivadas de los
+Escenarios Gherkin de arriba + integración PGlite (RLS, idempotencia física, odómetro).
+
+Decisiones tomadas al implementar, **para ratificación del dominio** (SDD: si difieren
+del contrato/spec, la spec manda; aquí se dejan explícitas en vez de solo en el código):
+
+1. **Unidad de la Cantidad (R1).** El hecho conserva su unidad original (`litros`|`galones`);
+   el evento `CombustibleRegistrado` y la lectura de Odómetro usan **litros canónicos**
+   (galón US → litros con factor 3.785411784). La vía REST `POST /combustible` **captura
+   litros** (campo `litros` del contrato); los **galones se capturan por `/sync`** con
+   `unidad` explícita, coherente con que la operación offline del Conductor es el camino
+   primario. *Alternativa abierta:* añadir `unidad` a `RegistrarTanqueoRequest` en el
+   OpenAPI si se decide soportar galones también en la vía online.
+2. **Odómetro autoritativo (R8, P8).** La regla refiere la lectura autoritativa del
+   Vehículo (BC-2 Fleet). Mientras **spec-003** no exista, esa autoridad vive en la tabla
+   `odometro_vehiculo` (upsert monótono con `GREATEST`) detrás del puerto
+   `OdometroVehiculoGateway`; al construir BC-2 se reemplaza el adaptador **sin tocar el
+   dominio de Fuel** (la costura ya está prevista).
