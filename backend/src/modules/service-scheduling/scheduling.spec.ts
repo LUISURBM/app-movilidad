@@ -31,6 +31,15 @@ import {
 } from "./application/use-cases";
 import { servicioToDto } from "./interface/mappers";
 import { ComplianceAcl } from "./infrastructure/compliance.acl";
+import { TanqueoAcl } from "./infrastructure/tanqueo.acl";
+
+// Fuel (spec-011): la ACL real de tanqueo delega en su caso de uso público.
+import {
+  InMemoryTanqueoRepository,
+  InMemoryOdometroVehiculo,
+  InMemoryEventPublisher as FuelEventPublisher,
+} from "../fuel-management/application/in-memory.adapters";
+import { RegistrarTanqueo } from "../fuel-management/application/use-cases";
 
 // Compliance (solo para la sección de ACL real; alias para evitar choque de nombres).
 import {
@@ -61,22 +70,39 @@ const COND_ANA = "cond-ana"; // Conductora "Ana Gómez"
 const v = (desde: number, hasta: number) =>
   ({ inicio: `2026-07-01T${String(desde).padStart(2, "0")}:00:00Z`, fin: `2026-07-01T${String(hasta).padStart(2, "0")}:00:00Z` });
 
+/** ACL real de tanqueo (spec-011) sobre adaptadores en memoria de Fuel. */
+function nuevoRegistradorTanqueo() {
+  const tanqueoRepo = new InMemoryTanqueoRepository();
+  const odometro = new InMemoryOdometroVehiculo();
+  const tanqueo = new TanqueoAcl(
+    new RegistrarTanqueo({
+      tanqueos: tanqueoRepo,
+      odometro,
+      publisher: new FuelEventPublisher(),
+      ids: new SequentialIdGenerator("tanq"),
+    }),
+  );
+  return { tanqueo, tanqueoRepo, odometro };
+}
+
 function nuevoEntorno() {
   const servicios = new InMemoryServicioRepository();
   const cumplimiento = new StubCumplimientoGateway();
   const publisher = new InMemoryEventPublisher();
   const idempotencia = new InMemoryIdempotencyStore();
   const bitacora = new InMemoryBitacoraSync();
+  const { tanqueo, tanqueoRepo, odometro } = nuevoRegistradorTanqueo();
   const deps: SchedulingDeps = {
     servicios,
     cumplimiento,
     publisher,
     idempotencia,
     bitacora,
+    tanqueo,
     clock: new FixedClock(DateOnly.parse("2026-07-01")),
     ids: new SequentialIdGenerator("srv"),
   };
-  return { servicios, cumplimiento, publisher, idempotencia, bitacora, deps };
+  return { servicios, cumplimiento, publisher, idempotencia, bitacora, tanqueoRepo, odometro, deps };
 }
 
 /** Crea un Servicio Planificado y devuelve su id. */
@@ -370,6 +396,7 @@ describe("spec-009 — ACL real: Scheduling consulta el Semáforo de Compliance"
       publisher,
       idempotencia: new InMemoryIdempotencyStore(),
       bitacora: new InMemoryBitacoraSync(),
+      tanqueo: nuevoRegistradorTanqueo().tanqueo,
       clock: new FixedClock(DateOnly.parse(HOY)),
       ids: new SequentialIdGenerator("srv"),
     };
@@ -563,20 +590,70 @@ describe("spec-010 — ejecución offline: idempotencia, S5, sync push/pull y bi
     expect(bitacora[0].detalle).toContain("terminal");
   });
 
-  it("un conflicto en el lote NO frena los demás cambios; tanqueo/novedad → error explícito", async () => {
+  it("un conflicto en el lote NO frena los demás cambios; novedad → error explícito", async () => {
     const otro = await crearYAsignar(env.deps, v(12, 14), "veh-otro", COND_JUAN);
     const resultados = await new SincronizarCambios(env.deps).execute({
       tenant: TENANT,
       usuarioId: COND_JUAN,
       cambios: [
         { clientId: "c1", entidad: "estado_servicio", operacion: "actualizar", payload: { servicioId, accion: "finalizar" } }, // Planificado→Finalizado: conflicto S2
-        { clientId: "c2", entidad: "tanqueo", operacion: "crear", payload: { litros: 30 } }, // spec-011: no soportada aún
+        { clientId: "c2", entidad: "novedad", operacion: "crear", payload: { nota: "pinchazo" } }, // spec-014: no soportada aún
         { clientId: "c3", entidad: "estado_servicio", operacion: "actualizar", payload: { servicioId: otro, accion: "iniciar" } },
       ],
     });
     expect(resultados.map((r) => r.resultado)).toEqual(["conflicto", "error", "confirmado"]);
     expect(resultados[0].problema!.type).toBe("transicion_invalida");
     expect(resultados[1].problema!.type).toBe("entidad_no_soportada");
+  });
+
+  it("spec-011: un Tanqueo en el lote se confirma vía la ACL de Fuel (append-only)", async () => {
+    const resultados = await new SincronizarCambios(env.deps).execute({
+      tenant: TENANT,
+      usuarioId: COND_JUAN,
+      cambios: [
+        {
+          clientId: "uuid-tanqueo-001", entidad: "tanqueo", operacion: "crear",
+          payload: { vehiculoId: VEH_ABC123, cantidad: 40, unidad: "litros", valorCop: 260000, odometro: 152300 },
+          ocurridoEn: "2026-07-01T09:00:00Z",
+        },
+      ],
+    });
+    expect(resultados[0].resultado).toBe("confirmado");
+    expect(resultados[0].serverId).toBeTruthy();
+    // El Odómetro autoritativo del Vehículo avanzó con el Tanqueo (R8).
+    expect(await env.odometro.lecturaActual(TENANT, VEH_ABC123)).toBe(152300);
+  });
+
+  it("spec-011: reintento del mismo Tanqueo (mismo clientId) → 'duplicado', un solo registro", async () => {
+    const lote = {
+      tenant: TENANT,
+      usuarioId: COND_JUAN,
+      cambios: [
+        {
+          clientId: "uuid-tanqueo-001", entidad: "tanqueo" as const, operacion: "crear" as const,
+          payload: { vehiculoId: VEH_ABC123, cantidad: 40, unidad: "litros", valorCop: 260000, odometro: 152300 },
+        },
+      ],
+    };
+    const sync = new SincronizarCambios(env.deps);
+    expect((await sync.execute(lote))[0].resultado).toBe("confirmado");
+    expect((await sync.execute(lote))[0].resultado).toBe("duplicado"); // confirmación perdida
+    expect(await env.tanqueoRepo.listByVehiculo(TENANT, VEH_ABC123)).toHaveLength(1);
+  });
+
+  it("spec-011: Tanqueo con valor COP no positivo → 'error' (rechazo local R6)", async () => {
+    const resultados = await new SincronizarCambios(env.deps).execute({
+      tenant: TENANT,
+      usuarioId: COND_JUAN,
+      cambios: [
+        {
+          clientId: "uuid-tanqueo-cero", entidad: "tanqueo", operacion: "crear",
+          payload: { vehiculoId: VEH_ABC123, cantidad: 40, unidad: "litros", valorCop: 0, odometro: 152300 },
+        },
+      ],
+    });
+    expect(resultados[0].resultado).toBe("error");
+    expect(resultados[0].problema!.type).toBe("valor_cop_no_positivo");
   });
 
   it("pull 'mi día' (R1): el Conductor solo ve SUS Servicios, con cursor", async () => {

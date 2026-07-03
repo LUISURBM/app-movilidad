@@ -28,6 +28,7 @@ import {
   IDEMPOTENCY_STORE,
   SCHEDULING_EVENT_PUBLISHER,
   SERVICIO_REPOSITORY,
+  TANQUEO_REGISTRADOR,
 } from "./interface/tokens";
 import { ServiciosController } from "./interface/servicios.controller";
 import { SyncController } from "./interface/sync.controller";
@@ -49,6 +50,9 @@ import {
 import { ComplianceAcl } from "./infrastructure/compliance.acl";
 import { ConsultarSemaforo } from "../compliance-documents/application/use-cases";
 import { ComplianceDocumentsModule } from "../compliance-documents/compliance-documents.module";
+import { TanqueoAcl } from "./infrastructure/tanqueo.acl";
+import { RegistrarTanqueo } from "../fuel-management/application/use-cases";
+import { FuelManagementModule } from "../fuel-management/fuel-management.module";
 
 /** Forma mínima esperada del request tras el guard de autenticación. */
 interface AuthedRequest {
@@ -63,16 +67,18 @@ const DEPS = [
   SCHEDULING_EVENT_PUBLISHER,
   IDEMPOTENCY_STORE,
   BITACORA_SYNC,
+  TANQUEO_REGISTRADOR,
   CLOCK,
   ID_GENERATOR,
 ];
-const armar = (servicios: never, cumplimiento: never, publisher: never, idempotencia: never, bitacora: never, clock: never, ids: never): SchedulingDeps =>
-  ({ servicios, cumplimiento, publisher, idempotencia, bitacora, clock, ids }) as unknown as SchedulingDeps;
+const armar = (servicios: never, cumplimiento: never, publisher: never, idempotencia: never, bitacora: never, tanqueo: never, clock: never, ids: never): SchedulingDeps =>
+  ({ servicios, cumplimiento, publisher, idempotencia, bitacora, tanqueo, clock, ids }) as unknown as SchedulingDeps;
 
 @Module({
-  // Dependencias entre bounded contexts: SOLO la API pública de Compliance —
-  // ACL de la regla de oro (spec-009 R2) y composición de /sync/pull (spec-010).
-  imports: [ComplianceDocumentsModule],
+  // Dependencias entre bounded contexts: SOLO la API pública de otros CORE —
+  // ACL de la regla de oro (spec-009 R2), composición de /sync/pull (spec-010) y
+  // registro de Tanqueos del lote offline vía Fuel (spec-011).
+  imports: [ComplianceDocumentsModule, FuelManagementModule],
   controllers: [ServiciosController, SyncController],
   providers: [
     // Plataforma
@@ -105,6 +111,14 @@ const armar = (servicios: never, cumplimiento: never, publisher: never, idempote
       provide: CUMPLIMIENTO_GATEWAY,
       inject: [ConsultarSemaforo],
       useFactory: (consultar: ConsultarSemaforo) => new ComplianceAcl(consultar),
+    },
+
+    // ACL real hacia Fuel (spec-011): resuelve `entidad: "tanqueo"` del lote offline.
+    // `RegistrarTanqueo` lo provee FuelManagementModule (importado arriba).
+    {
+      provide: TANQUEO_REGISTRADOR,
+      inject: [RegistrarTanqueo],
+      useFactory: (registrar: RegistrarTanqueo) => new TanqueoAcl(registrar),
     },
 
     // Casos de uso (se arman con los puertos + plataforma).

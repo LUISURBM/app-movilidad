@@ -20,6 +20,7 @@ import {
   CumplimientoGateway,
   EventPublisher,
   IdempotencyStore,
+  RegistradorTanqueo,
   ServicioRepository,
 } from "./ports";
 
@@ -29,6 +30,8 @@ export interface SchedulingDeps {
   publisher: EventPublisher;
   idempotencia: IdempotencyStore;
   bitacora: BitacoraSync;
+  /** ACL hacia Fuel (spec-011): resuelve los cambios `entidad: "tanqueo"` del lote. */
+  tanqueo: RegistradorTanqueo;
   clock: Clock;
   ids: IdGenerator;
 }
@@ -298,52 +301,89 @@ export class SincronizarCambios {
     const cambiarEstado = new CambiarEstadoServicio(this.deps);
 
     for (const cambio of input.cambios) {
-      if (cambio.entidad !== "estado_servicio") {
-        resultados.push({
-          clientId: cambio.clientId,
-          resultado: "error",
-          problema: {
-            type: "entidad_no_soportada",
-            title: `La entidad "${cambio.entidad}" se implementa en spec-011/spec-014.`,
-            status: 422,
-          },
-        });
+      if (cambio.entidad === "estado_servicio") {
+        resultados.push(await this.aplicarEstadoServicio(input, cambio, cambiarEstado));
         continue;
       }
-
-      const p = cambio.payload as {
-        servicioId?: string;
-        accion?: AccionServicio;
-        odometro?: number;
-      };
-      const r = await cambiarEstado.execute({
-        tenant: input.tenant,
-        servicioId: p.servicioId ?? "",
-        accion: p.accion as AccionServicio,
-        ocurridoEn: cambio.ocurridoEn,
-        odometro: p.odometro,
-        clientId: cambio.clientId,
-        usuarioId: input.usuarioId,
-      });
-
-      if (r.ok) {
-        resultados.push({
-          clientId: cambio.clientId,
-          resultado: r.value.duplicado ? "duplicado" : "confirmado",
-          serverId: p.servicioId,
-          version: r.value.version,
-        });
-      } else {
-        // Conflicto de dominio (terminal/transición/S5) vs error de datos.
-        const esConflicto = ["transicion_invalida", "servicio_sin_asignacion", "fin_anterior_a_inicio"].includes(r.error.code);
-        resultados.push({
-          clientId: cambio.clientId,
-          resultado: esConflicto ? "conflicto" : "error",
-          problema: { type: r.error.code, title: r.error.message, status: esConflicto ? 409 : 422 },
-        });
+      if (cambio.entidad === "tanqueo") {
+        // spec-011: append-only e idempotente, vía la ACL hacia Fuel (aislada del resto).
+        resultados.push(await this.aplicarTanqueo(input.tenant, cambio));
+        continue;
       }
+      // `novedad` (spec-014) y entidades desconocidas: aún no soportadas.
+      resultados.push({
+        clientId: cambio.clientId,
+        resultado: "error",
+        problema: {
+          type: "entidad_no_soportada",
+          title: `La entidad "${cambio.entidad}" se implementa en spec-014.`,
+          status: 422,
+        },
+      });
     }
     return resultados;
+  }
+
+  private async aplicarEstadoServicio(
+    input: { tenant: TenantId; usuarioId: string },
+    cambio: CambioSync,
+    cambiarEstado: CambiarEstadoServicio,
+  ): Promise<ResultadoCambioSync> {
+    const p = cambio.payload as {
+      servicioId?: string;
+      accion?: AccionServicio;
+      odometro?: number;
+    };
+    const r = await cambiarEstado.execute({
+      tenant: input.tenant,
+      servicioId: p.servicioId ?? "",
+      accion: p.accion as AccionServicio,
+      ocurridoEn: cambio.ocurridoEn,
+      odometro: p.odometro,
+      clientId: cambio.clientId,
+      usuarioId: input.usuarioId,
+    });
+
+    if (r.ok) {
+      return {
+        clientId: cambio.clientId,
+        resultado: r.value.duplicado ? "duplicado" : "confirmado",
+        serverId: p.servicioId,
+        version: r.value.version,
+      };
+    }
+    // Conflicto de dominio (terminal/transición/S5) vs error de datos.
+    const esConflicto = ["transicion_invalida", "servicio_sin_asignacion", "fin_anterior_a_inicio"].includes(r.error.code);
+    return {
+      clientId: cambio.clientId,
+      resultado: esConflicto ? "conflicto" : "error",
+      problema: { type: r.error.code, title: r.error.message, status: esConflicto ? 409 : 422 },
+    };
+  }
+
+  private async aplicarTanqueo(tenant: TenantId, cambio: CambioSync): Promise<ResultadoCambioSync> {
+    const p = cambio.payload as {
+      vehiculoId?: string;
+      cantidad?: number;
+      unidad?: "litros" | "galones";
+      valorCop?: number;
+      odometro?: number;
+    };
+    const r = await this.deps.tanqueo.registrar(tenant, {
+      clientId: cambio.clientId,
+      vehiculoId: p.vehiculoId ?? "",
+      cantidad: Number(p.cantidad),
+      unidad: p.unidad ?? "litros",
+      valorCop: Number(p.valorCop),
+      odometro: Number(p.odometro),
+      ocurridoEn: cambio.ocurridoEn,
+    });
+    return {
+      clientId: cambio.clientId,
+      resultado: r.resultado,
+      serverId: r.serverId,
+      problema: r.problema,
+    };
   }
 }
 

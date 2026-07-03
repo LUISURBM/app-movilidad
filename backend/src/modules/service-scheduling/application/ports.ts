@@ -93,3 +93,31 @@ export interface CumplimientoGateway {
 export interface EventPublisher {
   publish(tenant: TenantId, eventos: readonly DomainEvent[]): Promise<void>;
 }
+
+/**
+ * ACL hacia BC-6 Fuel Management (spec-011): el lote offline (spec-010) mezcla
+ * `estado_servicio` y `tanqueo`. Scheduling NO conoce el dominio de Fuel; traduce el
+ * cambio de tanqueo a esta entrada plana y delega el registro (append-only, idempotente).
+ * Igual que `CumplimientoGateway`, es la única puerta de Scheduling hacia otro contexto.
+ */
+export interface EntradaTanqueoSync {
+  readonly clientId: string;
+  readonly vehiculoId: string;
+  readonly cantidad: number;
+  readonly unidad: "litros" | "galones";
+  readonly valorCop: number;
+  readonly odometro: number;
+  readonly ocurridoEn?: string;
+}
+
+export interface ResultadoTanqueoSync {
+  readonly resultado: "confirmado" | "duplicado" | "error";
+  readonly serverId?: string;
+  /** true si el Odómetro venía por debajo de la lectura autoritativa (anomalía P8). */
+  readonly anomaliaOdometro?: boolean;
+  readonly problema?: { readonly type: string; readonly title: string; readonly status: number };
+}
+
+export interface RegistradorTanqueo {
+  registrar(tenant: TenantId, entrada: EntradaTanqueoSync): Promise<ResultadoTanqueoSync>;
+}
