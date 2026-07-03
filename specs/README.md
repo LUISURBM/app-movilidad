@@ -86,8 +86,8 @@ Las specs usan las keywords **oficiales de Gherkin en español**. Equivalencias 
 |---|---|---|---|---|---|
 | spec-001 | Registro y onboarding de Empresa (Tenant) con primer Administrador | BC-1 Identity & Access | MVP | Approved | [spec-001-onboarding-empresa.md](spec-001-onboarding-empresa.md) |
 | spec-002 | Invitar usuarios y asignar roles dentro del Tenant | BC-1 Identity & Access | MVP | Approved | [spec-002-invitar-usuarios-roles.md](spec-002-invitar-usuarios-roles.md) |
-| spec-003 | Registrar un Vehículo (placa única por Tenant, odómetro monótono) | BC-2 Fleet Management | MVP | Approved | [spec-003-registrar-vehiculo.md](spec-003-registrar-vehiculo.md) |
-| spec-004 | Registrar un Conductor y su Licencia de conducción | BC-3 Driver Management | MVP | Approved | [spec-004-registrar-conductor.md](spec-004-registrar-conductor.md) |
+| spec-003 | Registrar un Vehículo (placa única por Tenant, odómetro monótono) | BC-2 Fleet Management | MVP | Implemented | [spec-003-registrar-vehiculo.md](spec-003-registrar-vehiculo.md) |
+| spec-004 | Registrar un Conductor y su Licencia de conducción | BC-3 Driver Management | MVP | Implemented | [spec-004-registrar-conductor.md](spec-004-registrar-conductor.md) |
 | spec-005 | Registrar un Documento con Vencimiento y adjunto | BC-4 Compliance & Documents (CORE) | MVP | Approved | [spec-005-registrar-documento.md](spec-005-registrar-documento.md) |
 | spec-006 | Alertas anticipadas de Vencimiento (30/15/3 días) y cálculo del Semáforo | BC-4 Compliance & Documents (CORE) | MVP | Approved | [spec-006-alertas-vencimiento-semaforo.md](spec-006-alertas-vencimiento-semaforo.md) |
 | spec-007 | Renovación de un Documento con histórico | BC-4 Compliance & Documents (CORE) | MVP | Approved | [spec-007-renovacion-documento.md](spec-007-renovacion-documento.md) |

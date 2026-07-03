@@ -2,7 +2,7 @@
 
 - **Bounded Context:** BC-3 Driver Management
 - **Prioridad:** MVP
-- **Estado:** Approved
+- **Estado:** Implemented
 - **Aprobada por:** Luis (Product Manager + dominio) · 2026-06-25
 - **Specs relacionadas:** spec-002 (invitar usuario Conductor), spec-005 (registrar Documento), spec-008 (asignar Conductor a Servicio), spec-009 (regla de oro)
 
@@ -90,3 +90,25 @@ Característica: Registrar un Conductor y su Licencia de conducción
     Entonces solo se solicitan los datos personales necesarios para su habilitación
     Y la Empresa actúa como Responsable del tratamiento de esos datos
 ```
+
+## Notas de implementación (2026-07-02)
+
+Implementada en `backend/src/modules/driver-management` (BC-3) en Clean Architecture, con
+REST `POST/GET /conductores`. Suite verde: unitarias derivadas de los Escenarios Gherkin
+(incluida la colaboración R5 con Compliance vía ACL real) + integración PGlite (RLS,
+`UNIQUE(tenant, documento)`).
+
+Decisiones tomadas al implementar, **para ratificación del dominio**:
+
+1. **Licencia como Documento (R5).** Al registrar el Conductor, Driver crea el Documento
+   Tipo `LICENCIA` del sujeto en BC-4 vía ACL (`LicenciaAcl` → `RegistrarDocumento`), de
+   modo que su vencimiento alimenta el Semáforo y la regla de oro (spec-009). Requiere que
+   el Tipo `LICENCIA` exista en el catálogo del Tenant.
+2. **Fecha de emisión de la Licencia.** El contrato no la captura; se usa **hoy** (o el
+   vencimiento si ya pasó) como emisión, para respetar la invariante `vencimiento >= emisión`
+   de Compliance. No afecta el Semáforo (depende solo del vencimiento).
+3. **Vínculo con Usuario (R8) e invitación (escenario spec-002).** `usuarioId` es opcional
+   al alta; el flujo de invitación (`UsuarioInvitado`) pertenece a **BC-1/spec-002** y queda
+   fuera de este alcance.
+4. **`semaforo` en la vista del Conductor.** Opcional en el contrato; se omite en
+   `GET /conductores` (consultable en `GET /cumplimiento/conductores/{id}`).

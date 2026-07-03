@@ -23,6 +23,8 @@ import {
 import { TenantId } from "./shared/kernel";
 import { ComplianceDocumentsModule } from "./modules/compliance-documents/compliance-documents.module";
 import { ServiceSchedulingModule } from "./modules/service-scheduling/service-scheduling.module";
+import { FleetManagementModule } from "./modules/fleet-management/fleet-management.module";
+import { DriverManagementModule } from "./modules/driver-management/driver-management.module";
 import { EvaluarVencimientos } from "./modules/compliance-documents/application/use-cases";
 import { devAuthMiddleware } from "./platform/dev-auth.middleware";
 import {
@@ -76,7 +78,7 @@ class PlatformWorkers implements OnApplicationBootstrap, OnApplicationShutdown {
 }
 
 @Module({
-  imports: [ComplianceDocumentsModule, ServiceSchedulingModule],
+  imports: [ComplianceDocumentsModule, ServiceSchedulingModule, FleetManagementModule, DriverManagementModule],
   controllers: [HealthController],
   providers: [
     // Tenants activos: in-memory desde env (el onboarding spec-001 traerá la fuente real).

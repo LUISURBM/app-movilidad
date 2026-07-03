@@ -121,6 +121,6 @@ interface AuthedRequest {
    *  - `ConsultarDocumentosVigentes`: composición de /sync/pull, "mi día" (spec-010).
    * Nada más se exporta: los repos y el dominio son privados del bounded context.
    */
-  exports: [ConsultarSemaforo, EvaluarVencimientos, ConsultarDocumentosVigentes],
+  exports: [ConsultarSemaforo, EvaluarVencimientos, ConsultarDocumentosVigentes, RegistrarDocumento],
 })
 export class ComplianceDocumentsModule {}

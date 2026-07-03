@@ -2,7 +2,7 @@
 
 - **Bounded Context:** BC-2 Fleet Management
 - **Prioridad:** MVP
-- **Estado:** Approved
+- **Estado:** Implemented
 - **Aprobada por:** Luis (Product Manager + dominio) · 2026-06-25
 - **Specs relacionadas:** spec-005 (registrar Documento), spec-008 (asignar Vehículo a Servicio), spec-011 (Tanqueo), spec-012 (Mantenimiento)
 
@@ -99,3 +99,23 @@ Característica: Registrar un Vehículo con placa única por Tenant y odómetro 
     Cuando se intenta cambiar su placa a "GHI321"
     Entonces el cambio se rechaza por ser la Placa inmutable
 ```
+
+## Notas de implementación (2026-07-02)
+
+Implementada en `backend/src/modules/fleet-management` (BC-2) en Clean Architecture, con
+REST `POST/GET /vehiculos` y `POST /vehiculos/{id}/odometro`. Suite verde: unitarias
+derivadas de los Escenarios Gherkin + integración PGlite (RLS, `UNIQUE(tenant, placa)`).
+
+Decisiones tomadas al implementar, **para ratificación del dominio**:
+
+1. **`semaforo` en la vista del Vehículo.** El contrato lo declara opcional; se **omite**
+   en `GET /vehiculos` para no acoplar Fleet a Compliance — ya es consultable en
+   `GET /cumplimiento/vehiculos/{id}`.
+2. **Afiliación (R7/R9).** El dominio y el caso de uso la soportan y emiten
+   `VehiculoAfiliado`, pero `RegistrarVehiculoRequest` del OpenAPI **no** captura
+   afiliación; hoy solo se ejercita por el caso de uso (test), no por REST. *Alternativa
+   abierta:* añadir `afiliacion` al request si se requiere capturarla online.
+3. **Odómetro autoritativo (R5/R6).** Vive ahora en BC-2 (`Vehiculo`, monótono: una
+   lectura menor se **rechaza**). *Seguimiento:* re-cablear el puerto `OdometroVehiculoGateway`
+   de Fuel (spec-011, hoy un stand-in `odometro_vehiculo`) para que delegue en la lectura
+   autoritativa del Vehículo vía ACL — ya desbloqueado al existir BC-2.
