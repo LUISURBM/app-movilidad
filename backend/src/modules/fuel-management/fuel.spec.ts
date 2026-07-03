@@ -12,6 +12,18 @@ import {
 } from "./application/in-memory.adapters";
 import { FuelDeps, RegistrarTanqueo } from "./application/use-cases";
 import { UnidadCombustible } from "./domain/value-objects";
+import { FleetOdometroAcl } from "./infrastructure/fleet-odometro.acl";
+
+// Fleet (BC-2) para la costura spec-003 + spec-011: el Tanqueo actualiza el Odómetro real.
+import {
+  InMemoryVehiculoRepository,
+  InMemoryEventPublisher as FleetEventPublisher,
+} from "../fleet-management/application/in-memory.adapters";
+import {
+  ActualizarOdometro,
+  FleetDeps,
+  RegistrarVehiculo,
+} from "../fleet-management/application/use-cases";
 
 const TENANT = TenantId("tenant-duster");
 const OTRO_TENANT = TenantId("tenant-otro");
@@ -142,5 +154,59 @@ describe("spec-011 — Registrar Tanqueo offline, append-only e idempotente", ()
     );
     expect(otro.ok && !otro.value.duplicado).toBe(true); // no colisiona entre tenants
     expect(await env.tanqueos.listByVehiculo(OTRO_TENANT, VEH_ABC123)).toHaveLength(1);
+  });
+});
+
+// ─── Costura spec-003 + spec-011: el Tanqueo actualiza el Odómetro autoritativo (Fleet) ───
+describe("spec-011 + spec-003 — el Tanqueo avanza el Odómetro del Vehículo vía Fleet", () => {
+  async function entornoConFleet() {
+    // Fleet (BC-2) in-memory con un Vehículo registrado con odómetro inicial 152000.
+    const vehiculos = new InMemoryVehiculoRepository();
+    const fleetDeps: FleetDeps = {
+      vehiculos,
+      publisher: new FleetEventPublisher(),
+      ids: new SequentialIdGenerator("veh"),
+    };
+    const reg = await new RegistrarVehiculo(fleetDeps).execute({
+      tenant: TENANT, placa: "ABC123", clase: "automovil", odometroInicial: 152000,
+    });
+    const vehiculoId = reg.ok ? reg.value.vehiculoId : "";
+
+    // Fuel con el Odómetro cableado a Fleet (ACL real).
+    const tanqueos = new InMemoryTanqueoRepository();
+    const deps: FuelDeps = {
+      tanqueos,
+      odometro: new FleetOdometroAcl(new ActualizarOdometro(fleetDeps), vehiculos),
+      publisher: new InMemoryEventPublisher(),
+      ids: new SequentialIdGenerator("tanq"),
+    };
+    return { deps, tanqueos, vehiculos, vehiculoId };
+  }
+
+  it("un Tanqueo con odómetro mayor avanza la lectura autoritativa del Vehículo", async () => {
+    const env = await entornoConFleet();
+    const r = await new RegistrarTanqueo(env.deps).execute({
+      tenant: TENANT, clientId: "t1", vehiculoId: env.vehiculoId,
+      cantidad: 40, unidad: UnidadCombustible.Litros, valorCop: 260000, odometro: 152300,
+    });
+    expect(r.ok && r.value.anomaliaOdometro).toBe(false);
+    const v = await env.vehiculos.findById(TENANT, env.vehiculoId);
+    expect(v!.odometro!.km).toBe(152300); // el Odómetro del Vehículo avanzó (BC-2)
+  });
+
+  it("un Tanqueo con odómetro menor a la autoritativa marca anomalía y no retrocede", async () => {
+    const env = await entornoConFleet();
+    await new RegistrarTanqueo(env.deps).execute({
+      tenant: TENANT, clientId: "t1", vehiculoId: env.vehiculoId,
+      cantidad: 40, unidad: UnidadCombustible.Litros, valorCop: 260000, odometro: 152300,
+    });
+    const r = await new RegistrarTanqueo(env.deps).execute({
+      tenant: TENANT, clientId: "t2", vehiculoId: env.vehiculoId,
+      cantidad: 30, unidad: UnidadCombustible.Litros, valorCop: 200000, odometro: 151900,
+    });
+    expect(r.ok && r.value.anomaliaOdometro).toBe(true); // anomalía (R8)
+    const v = await env.vehiculos.findById(TENANT, env.vehiculoId);
+    expect(v!.odometro!.km).toBe(152300); // NO retrocede
+    expect(await env.tanqueos.listByVehiculo(TENANT, env.vehiculoId)).toHaveLength(2); // ambos hechos se conservan
   });
 });
