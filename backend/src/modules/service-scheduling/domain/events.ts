@@ -10,7 +10,8 @@ export type DomainEvent =
   | ServicioAsignado
   | AsignacionRechazada
   | ServicioIniciado
-  | ServicioFinalizado;
+  | ServicioFinalizado
+  | NovedadReportada;
 
 interface BaseEvent {
   readonly tipo: string;
@@ -63,6 +64,15 @@ export interface ServicioFinalizado extends BaseEvent {
   readonly servicioId: string;
   readonly finReal: string; // ISO date-time
   readonly odometroFin?: number;
+}
+
+/** spec-014 — Novedad append-only reportada por el Conductor. `tipo` es el discriminante
+ * del evento; `tipoNovedad` es la clase de la Novedad. Consumidores: operador, memoria operativa. */
+export interface NovedadReportada extends BaseEvent {
+  readonly tipo: "NovedadReportada";
+  readonly servicioId: string;
+  readonly tipoNovedad: "incidente" | "retraso" | "siniestro";
+  readonly fotoRef?: string;
 }
 
 export const nowIso = (): string => new Date().toISOString();

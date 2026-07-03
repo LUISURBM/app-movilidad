@@ -2,7 +2,8 @@
 
 - **Bounded Context:** BC-5 Service Scheduling (CORE) — operación offline-first
 - **Prioridad:** MVP
-- **Estado:** Draft
+- **Estado:** Implemented
+- **Aprobada por:** Luis (Product Manager + dominio) · 2026-07-02 (Draft → Approved → Implemented en la misma sesión, autorizado por el PM)
 - **Specs relacionadas:** spec-008 (Servicio), spec-010 (operación offline del Conductor), spec-011 (Tanqueo append-only)
 
 ## Objetivo
@@ -102,3 +103,18 @@ Característica: Registrar una Novedad offline con foto, append-only e idempoten
     Entonces el registro se rechaza
     Y se informa que la Novedad debe pertenecer a un Servicio existente
 ```
+
+## Notas de implementación (2026-07-02)
+
+Implementada (lado servidor) en `backend/src/modules/service-scheduling` (BC-5): agregado
+`Novedad` append-only + `RegistrarNovedad` (idempotente por clientId, valida Servicio
+existente R1) + enrutamiento de `entidad: "novedad"` en `SincronizarCambios` (spec-010) +
+migración 0008. Evento `NovedadReportada`. Tests verdes (novedad.spec, derivados de los
+Gherkin). La spec pasó de Draft a Implemented con autorización del PM. Decisiones:
+
+1. **Foto en dos pasos (R5/R6) = cliente.** La subida binario→URL y el blob local con no-pérdida
+   (R8) son responsabilidad de la app Flutter; el servidor solo persiste `fotoRef` (metadato).
+2. **Tercer tipo de sync.** Con Novedad, el lote offline (spec-010) soporta los tres:
+   `estado_servicio`, `tanqueo` (spec-011) y `novedad`. `entidad_no_soportada` queda solo para
+   entidades realmente desconocidas.
+3. **Servicio inexistente (R1)** → resultado `error` con `servicio_no_encontrado` en el lote.

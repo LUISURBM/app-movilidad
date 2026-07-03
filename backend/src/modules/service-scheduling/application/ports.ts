@@ -10,6 +10,7 @@
  */
 import { TenantId } from "../../../shared/kernel";
 import { Servicio } from "../domain/servicio.aggregate";
+import { Novedad } from "../domain/novedad.aggregate";
 import { VentanaHoraria } from "../domain/value-objects";
 import { VentanaOcupada } from "../domain/agenda.service";
 import { DomainEvent } from "../domain/events";
@@ -120,4 +121,14 @@ export interface ResultadoTanqueoSync {
 
 export interface RegistradorTanqueo {
   registrar(tenant: TenantId, entrada: EntradaTanqueoSync): Promise<ResultadoTanqueoSync>;
+}
+
+/**
+ * Repositorio de Novedades — APPEND-ONLY (spec-014 R3), dentro de un Tenant. `append` solo
+ * inserta; la idempotencia (R7) se resuelve por `clientId` antes de insertar (+ UNIQUE físico).
+ */
+export interface NovedadRepository {
+  findByClientId(tenant: TenantId, clientId: string): Promise<Novedad | null>;
+  append(tenant: TenantId, novedad: Novedad): Promise<void>;
+  listByServicio(tenant: TenantId, servicioId: string): Promise<Novedad[]>;
 }

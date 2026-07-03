@@ -18,6 +18,7 @@ import {
   InMemoryBitacoraSync,
   InMemoryEventPublisher,
   InMemoryIdempotencyStore,
+  InMemoryNovedadRepository,
   InMemoryServicioRepository,
   StubCumplimientoGateway,
 } from "./application/in-memory.adapters";
@@ -99,6 +100,7 @@ function nuevoEntorno() {
     idempotencia,
     bitacora,
     tanqueo,
+    novedades: new InMemoryNovedadRepository(),
     clock: new FixedClock(DateOnly.parse("2026-07-01")),
     ids: new SequentialIdGenerator("srv"),
   };
@@ -397,6 +399,7 @@ describe("spec-009 — ACL real: Scheduling consulta el Semáforo de Compliance"
       idempotencia: new InMemoryIdempotencyStore(),
       bitacora: new InMemoryBitacoraSync(),
       tanqueo: nuevoRegistradorTanqueo().tanqueo,
+      novedades: new InMemoryNovedadRepository(),
       clock: new FixedClock(DateOnly.parse(HOY)),
       ids: new SequentialIdGenerator("srv"),
     };
@@ -597,13 +600,13 @@ describe("spec-010 — ejecución offline: idempotencia, S5, sync push/pull y bi
       usuarioId: COND_JUAN,
       cambios: [
         { clientId: "c1", entidad: "estado_servicio", operacion: "actualizar", payload: { servicioId, accion: "finalizar" } }, // Planificado→Finalizado: conflicto S2
-        { clientId: "c2", entidad: "novedad", operacion: "crear", payload: { nota: "pinchazo" } }, // spec-014: no soportada aún
+        { clientId: "c2", entidad: "novedad", operacion: "crear", payload: { servicioId: "no-existe", tipo: "incidente", descripcion: "x" } }, // spec-014: Servicio inexistente → error
         { clientId: "c3", entidad: "estado_servicio", operacion: "actualizar", payload: { servicioId: otro, accion: "iniciar" } },
       ],
     });
     expect(resultados.map((r) => r.resultado)).toEqual(["conflicto", "error", "confirmado"]);
     expect(resultados[0].problema!.type).toBe("transicion_invalida");
-    expect(resultados[1].problema!.type).toBe("entidad_no_soportada");
+    expect(resultados[1].problema!.type).toBe("servicio_no_encontrado");
   });
 
   it("spec-011: un Tanqueo en el lote se confirma vía la ACL de Fuel (append-only)", async () => {

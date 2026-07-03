@@ -15,11 +15,13 @@ import { Servicio } from "../domain/servicio.aggregate";
 import { Asignacion, EstadoServicio, Ruta, VentanaHoraria } from "../domain/value-objects";
 import { detectarChoque } from "../domain/agenda.service";
 import { AsignacionRechazada, nowIso } from "../domain/events";
+import { Novedad } from "../domain/novedad.aggregate";
 import {
   BitacoraSync,
   CumplimientoGateway,
   EventPublisher,
   IdempotencyStore,
+  NovedadRepository,
   RegistradorTanqueo,
   ServicioRepository,
 } from "./ports";
@@ -32,6 +34,8 @@ export interface SchedulingDeps {
   bitacora: BitacoraSync;
   /** ACL hacia Fuel (spec-011): resuelve los cambios `entidad: "tanqueo"` del lote. */
   tanqueo: RegistradorTanqueo;
+  /** Repositorio de Novedades append-only (spec-014). */
+  novedades: NovedadRepository;
   clock: Clock;
   ids: IdGenerator;
 }
@@ -310,13 +314,18 @@ export class SincronizarCambios {
         resultados.push(await this.aplicarTanqueo(input.tenant, cambio));
         continue;
       }
-      // `novedad` (spec-014) y entidades desconocidas: aún no soportadas.
+      if (cambio.entidad === "novedad") {
+        // spec-014: append-only e idempotente; valida que el Servicio exista.
+        resultados.push(await this.aplicarNovedad(input.tenant, cambio));
+        continue;
+      }
+      // Entidades desconocidas: no soportadas.
       resultados.push({
         clientId: cambio.clientId,
         resultado: "error",
         problema: {
           type: "entidad_no_soportada",
-          title: `La entidad "${cambio.entidad}" se implementa en spec-014.`,
+          title: `La entidad "${cambio.entidad}" no está soportada.`,
           status: 422,
         },
       });
@@ -384,6 +393,79 @@ export class SincronizarCambios {
       serverId: r.serverId,
       problema: r.problema,
     };
+  }
+
+  private async aplicarNovedad(tenant: TenantId, cambio: CambioSync): Promise<ResultadoCambioSync> {
+    const p = cambio.payload as {
+      servicioId?: string;
+      tipo?: string;
+      descripcion?: string;
+      fotoRef?: string;
+    };
+    const r = await new RegistrarNovedad(this.deps).execute({
+      tenant,
+      clientId: cambio.clientId,
+      servicioId: p.servicioId ?? "",
+      tipo: p.tipo ?? "",
+      descripcion: p.descripcion ?? "",
+      fotoRef: p.fotoRef,
+      ocurridoEn: cambio.ocurridoEn,
+    });
+    if (r.ok) {
+      return {
+        clientId: cambio.clientId,
+        resultado: r.value.duplicado ? "duplicado" : "confirmado",
+        serverId: r.value.novedadId,
+      };
+    }
+    return {
+      clientId: cambio.clientId,
+      resultado: "error",
+      problema: { type: r.error.code, title: r.error.message, status: 422 },
+    };
+  }
+}
+
+// ───────────── spec-014: Registrar Novedad (append-only, idempotente) ─────────────
+
+export interface RegistrarNovedadInput {
+  tenant: TenantId;
+  clientId: string;
+  servicioId: string;
+  tipo: string;
+  descripcion: string;
+  fotoRef?: string;
+  ocurridoEn?: string;
+}
+
+export class RegistrarNovedad {
+  constructor(private readonly deps: SchedulingDeps) {}
+
+  async execute(input: RegistrarNovedadInput): Promise<Result<{ novedadId: string; duplicado: boolean }>> {
+    // Idempotencia (R7): mismo clientId → una sola Novedad.
+    const previa = await this.deps.novedades.findByClientId(input.tenant, input.clientId);
+    if (previa) return ok({ novedadId: previa.id, duplicado: true });
+
+    // R1: la Novedad pertenece SIEMPRE a un Servicio existente.
+    const servicio = await this.deps.servicios.findById(input.tenant, input.servicioId);
+    if (!servicio) {
+      return err(new DomainError("servicio_no_encontrado", "La Novedad debe pertenecer a un Servicio existente."));
+    }
+
+    const creada = Novedad.registrar({
+      id: this.deps.ids.next(),
+      clientId: input.clientId,
+      servicioId: input.servicioId,
+      tipo: input.tipo,
+      descripcion: input.descripcion,
+      fotoRef: input.fotoRef,
+      ocurridoEn: input.ocurridoEn,
+    });
+    if (!creada.ok) return creada;
+
+    await this.deps.novedades.append(input.tenant, creada.value);
+    await this.deps.publisher.publish(input.tenant, creada.value.pullEventos());
+    return ok({ novedadId: creada.value.id, duplicado: false });
   }
 }
 

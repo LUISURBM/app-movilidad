@@ -95,9 +95,9 @@ Las specs usan las keywords **oficiales de Gherkin en español**. Equivalencias 
 | spec-009 | Regla de oro: bloquear Asignación si el recurso no está al día (Semáforo rojo) | BC-5 Service Scheduling (CORE) + BC-4 vía ACL | MVP | Approved | [spec-009-regla-de-oro-bloqueo-asignacion.md](spec-009-regla-de-oro-bloqueo-asignacion.md) |
 | spec-010 | El Conductor ejecuta su Servicio OFFLINE (mi día, iniciar/finalizar, sincronizar) | BC-5 Service Scheduling (CORE), offline | MVP | Approved | [spec-010-conductor-ejecuta-servicio-offline.md](spec-010-conductor-ejecuta-servicio-offline.md) |
 | spec-011 | Registrar Tanqueo (combustible) OFFLINE append-only con idempotencia | BC-6 Fuel Management, offline | MVP | Implemented | [spec-011-tanqueo-offline-append-only.md](spec-011-tanqueo-offline-append-only.md) |
-| spec-012 | Programar Mantenimiento preventivo por Umbral de Odómetro/fecha | BC-7 Maintenance Management | MVP | Draft | [spec-012-mantenimiento-preventivo-umbral.md](spec-012-mantenimiento-preventivo-umbral.md) |
+| spec-012 | Programar Mantenimiento preventivo por Umbral de Odómetro/fecha | BC-7 Maintenance Management | MVP | Implemented | [spec-012-mantenimiento-preventivo-umbral.md](spec-012-mantenimiento-preventivo-umbral.md) |
 | spec-013 | Gestión de Suscripción y Plan (vehículos activos, límites, entitlements) | BC-8 Billing & Subscriptions | V1 | Draft | [spec-013-gestion-suscripcion-plan.md](spec-013-gestion-suscripcion-plan.md) |
-| spec-014 | Registrar una Novedad OFFLINE con foto (append-only) | BC-5 Service Scheduling (CORE), offline | MVP | Draft | [spec-014-novedad-offline-con-foto.md](spec-014-novedad-offline-con-foto.md) |
+| spec-014 | Registrar una Novedad OFFLINE con foto (append-only) | BC-5 Service Scheduling (CORE), offline | MVP | Implemented | [spec-014-novedad-offline-con-foto.md](spec-014-novedad-offline-con-foto.md) |
 
 > **Prioridades:** **MVP** = entra al dogfooding con la Duster (Fase 1 §5). **V1** = comercializable (self-service + cobro). **V2** = upsells diferidos (GPS live, DIAN). spec-013 es V1 porque la gestión de planes/cobro pertenece a la fase comercializable; el onboarding del MVP (spec-001) solo crea la Suscripción Free por defecto.
 

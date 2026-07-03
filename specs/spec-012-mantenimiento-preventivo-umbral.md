@@ -2,7 +2,8 @@
 
 - **Bounded Context:** BC-7 Maintenance Management
 - **Prioridad:** MVP
-- **Estado:** Draft
+- **Estado:** Implemented
+- **Aprobada por:** Luis (Product Manager + dominio) · 2026-07-02 (Draft → Approved → Implemented en la misma sesión, autorizado por el PM)
 - **Specs relacionadas:** spec-003 (Vehículo, Odómetro), spec-011 (Tanqueo que actualiza Odómetro), spec-010 (Servicio que actualiza Odómetro)
 
 ## Objetivo
@@ -100,3 +101,21 @@ Característica: Programar Mantenimiento preventivo por Umbral de Odómetro o fe
     Entonces se muestra una advertencia de mantenimiento vencido
     Y la operación del Vehículo no se bloquea automáticamente
 ```
+
+## Notas de implementación (2026-07-02)
+
+Implementada en `backend/src/modules/maintenance-management` (BC-7) en Clean Architecture.
+Dominio + aplicación + migración 0009 + tests verdes (unitarias derivadas de los Gherkin:
+programación por km/fecha, idempotencia R8, reinicio de ciclo, correctivo; + integración
+PGlite: RLS, unicidad, CHECK de criterio). Decisiones tomadas al implementar, **para
+ratificación del dominio** (la spec pasó de Draft a Implemented con autorización del PM):
+
+1. **Disparo por km (P6) — seam.** `EvaluarUmbralPorOdometro` es el caso de uso que reacciona
+   a un avance del Odómetro; su **cableado al evento `OdometroActualizado`** (Fuel/Fleet/
+   Servicio) vía outbox/ACL queda pendiente. Hoy se prueba invocándolo directamente.
+2. **Disparo por fecha (P7) — job diario.** `EvaluarVencimientosPorFecha(tenant)` lo invocará
+   el `DailyTenantJob` de plataforma (como con Compliance); wiring pendiente.
+3. **Sin REST aún.** El OpenAPI **no** define rutas `/mantenimiento`; fiel a API-First, no se
+   crearon endpoints. El módulo expone los casos de uso, listos para el controller cuando el
+   contrato defina las rutas. El módulo aún no se importa en AppModule (sin REST ni disparadores).
+4. **Sin bloqueo (R9).** El vencido queda como estado consultable (advierte); no bloquea.

@@ -5,6 +5,7 @@
  */
 import { TenantId } from "../../../shared/kernel";
 import { Servicio } from "../domain/servicio.aggregate";
+import { Novedad } from "../domain/novedad.aggregate";
 import { VentanaHoraria } from "../domain/value-objects";
 import { VentanaOcupada } from "../domain/agenda.service";
 import { DomainEvent } from "../domain/events";
@@ -14,6 +15,7 @@ import {
   EntradaBitacora,
   EventPublisher,
   IdempotencyStore,
+  NovedadRepository,
   RespuestaIdempotente,
   ResultadoOperabilidad,
   ServicioRepository,
@@ -145,5 +147,24 @@ export class InMemoryEventPublisher implements EventPublisher {
 
   limpiar(): void {
     this.publicados.length = 0;
+  }
+}
+
+/** Repositorio de Novedades append-only en memoria, con dedupe idempotente (spec-014 R7). */
+export class InMemoryNovedadRepository implements NovedadRepository {
+  private porClientId = new Map<string, Novedad>();
+  private readonly todas: Array<{ tenant: TenantId; novedad: Novedad }> = [];
+
+  async findByClientId(tenant: TenantId, clientId: string): Promise<Novedad | null> {
+    return this.porClientId.get(`${tenant}::${clientId}`) ?? null;
+  }
+  async append(tenant: TenantId, novedad: Novedad): Promise<void> {
+    const k = `${tenant}::${novedad.clientId}`;
+    if (this.porClientId.has(k)) return; // append-only + idempotencia
+    this.porClientId.set(k, novedad);
+    this.todas.push({ tenant, novedad });
+  }
+  async listByServicio(tenant: TenantId, servicioId: string): Promise<Novedad[]> {
+    return this.todas.filter((n) => n.tenant === tenant && n.novedad.servicioId === servicioId).map((n) => n.novedad);
   }
 }

@@ -29,6 +29,7 @@ import {
   SCHEDULING_EVENT_PUBLISHER,
   SERVICIO_REPOSITORY,
   TANQUEO_REGISTRADOR,
+  NOVEDAD_REPOSITORY,
 } from "./interface/tokens";
 import { ServiciosController } from "./interface/servicios.controller";
 import { SyncController } from "./interface/sync.controller";
@@ -37,6 +38,7 @@ import {
   InMemoryBitacoraSync,
   InMemoryEventPublisher,
   InMemoryIdempotencyStore,
+  InMemoryNovedadRepository,
   InMemoryServicioRepository,
 } from "./application/in-memory.adapters";
 import {
@@ -68,11 +70,12 @@ const DEPS = [
   IDEMPOTENCY_STORE,
   BITACORA_SYNC,
   TANQUEO_REGISTRADOR,
+  NOVEDAD_REPOSITORY,
   CLOCK,
   ID_GENERATOR,
 ];
-const armar = (servicios: never, cumplimiento: never, publisher: never, idempotencia: never, bitacora: never, tanqueo: never, clock: never, ids: never): SchedulingDeps =>
-  ({ servicios, cumplimiento, publisher, idempotencia, bitacora, tanqueo, clock, ids }) as unknown as SchedulingDeps;
+const armar = (servicios: never, cumplimiento: never, publisher: never, idempotencia: never, bitacora: never, tanqueo: never, novedades: never, clock: never, ids: never): SchedulingDeps =>
+  ({ servicios, cumplimiento, publisher, idempotencia, bitacora, tanqueo, novedades, clock, ids }) as unknown as SchedulingDeps;
 
 @Module({
   // Dependencias entre bounded contexts: SOLO la API pública de otros CORE —
@@ -103,6 +106,7 @@ const armar = (servicios: never, cumplimiento: never, publisher: never, idempote
     { provide: SCHEDULING_EVENT_PUBLISHER, useClass: InMemoryEventPublisher },
     { provide: IDEMPOTENCY_STORE, useClass: InMemoryIdempotencyStore },
     { provide: BITACORA_SYNC, useClass: InMemoryBitacoraSync },
+    { provide: NOVEDAD_REPOSITORY, useClass: InMemoryNovedadRepository },
 
     // ACL real hacia Compliance (spec-009 R2). `ConsultarSemaforo` la provee el
     // módulo raíz de la app (AppModule) al importar ambos módulos; aquí se declara
