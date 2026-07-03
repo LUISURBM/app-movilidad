@@ -2,7 +2,7 @@
 
 - **Bounded Context:** BC-1 Identity & Access
 - **Prioridad:** MVP
-- **Estado:** Approved
+- **Estado:** Implemented
 - **Aprobada por:** Luis (Product Manager + dominio) · 2026-06-25
 - **Specs relacionadas:** spec-001 (onboarding Empresa), spec-004 (registrar Conductor), spec-010 (operación del Conductor)
 
@@ -102,3 +102,21 @@ Característica: Invitar usuarios y asignar roles dentro del Tenant
     Entonces la invitación se rechaza
     Y se informa que el correo ya pertenece a un Usuario activo
 ```
+
+## Notas de implementación (2026-07-02)
+
+Implementada en `backend/src/modules/identity-access` (BC-1). REST `POST/GET /usuarios` y
+`PATCH /usuarios/{id}`. RBAC (solo Administrador invita/gestiona) verificado. Suite verde:
+unitarias derivadas de los Gherkin + integración PGlite (RLS + único parcial por correo).
+Decisiones tomadas al implementar, **para ratificación del dominio**:
+
+1. **Estados del ciclo de vida.** El dominio modela los 5 estados (R7): Invitado, Activo,
+   Suspendido, Removido, Expirado. El contrato expone solo `invitado|activo|suspendido`, así
+   que Removido/Expirado se **filtran del listado** REST (no son usuarios operativos).
+2. **Aceptación y credenciales (R8).** `Invitado → Activo` se modela como transición
+   (caso de uso `AceptarInvitacion`, y `PATCH estado=activo`). La fijación de credenciales en
+   el proveedor de identidad se abstrae (la autenticación la resuelve el JWT de plataforma);
+   no hay endpoint REST de aceptación en el contrato.
+3. **Expiración (R7).** `ExpirarInvitacion` es un caso de uso invocable por un job futuro; aún
+   no hay disparador temporal automático.
+4. **Único Tenant por Usuario (R5).** La multi-membresía queda diferida (costura).

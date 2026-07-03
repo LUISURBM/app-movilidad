@@ -84,8 +84,8 @@ Las specs usan las keywords **oficiales de Gherkin en español**. Equivalencias 
 
 | Id | Título | Bounded Context | Prioridad | Estado | Archivo |
 |---|---|---|---|---|---|
-| spec-001 | Registro y onboarding de Empresa (Tenant) con primer Administrador | BC-1 Identity & Access | MVP | Approved | [spec-001-onboarding-empresa.md](spec-001-onboarding-empresa.md) |
-| spec-002 | Invitar usuarios y asignar roles dentro del Tenant | BC-1 Identity & Access | MVP | Approved | [spec-002-invitar-usuarios-roles.md](spec-002-invitar-usuarios-roles.md) |
+| spec-001 | Registro y onboarding de Empresa (Tenant) con primer Administrador | BC-1 Identity & Access | MVP | Implemented | [spec-001-onboarding-empresa.md](spec-001-onboarding-empresa.md) |
+| spec-002 | Invitar usuarios y asignar roles dentro del Tenant | BC-1 Identity & Access | MVP | Implemented | [spec-002-invitar-usuarios-roles.md](spec-002-invitar-usuarios-roles.md) |
 | spec-003 | Registrar un Vehículo (placa única por Tenant, odómetro monótono) | BC-2 Fleet Management | MVP | Implemented | [spec-003-registrar-vehiculo.md](spec-003-registrar-vehiculo.md) |
 | spec-004 | Registrar un Conductor y su Licencia de conducción | BC-3 Driver Management | MVP | Implemented | [spec-004-registrar-conductor.md](spec-004-registrar-conductor.md) |
 | spec-005 | Registrar un Documento con Vencimiento y adjunto | BC-4 Compliance & Documents (CORE) | MVP | Approved | [spec-005-registrar-documento.md](spec-005-registrar-documento.md) |

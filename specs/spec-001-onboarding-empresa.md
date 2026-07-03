@@ -2,7 +2,7 @@
 
 - **Bounded Context:** BC-1 Identity & Access
 - **Prioridad:** MVP
-- **Estado:** Approved
+- **Estado:** Implemented
 - **Aprobada por:** Luis (Product Manager + dominio) · 2026-06-25
 - **Specs relacionadas:** spec-002 (invitar usuarios y roles), spec-003 (registrar Vehículo), spec-013 (suscripción/plan)
 
@@ -97,3 +97,22 @@ Característica: Registro y onboarding de una Empresa (Tenant) con su primer Adm
     Entonces solo obtiene datos de "Empresa B"
     Y nunca obtiene datos de "Empresa A"
 ```
+
+## Notas de implementación (2026-07-02)
+
+Implementada en `backend/src/modules/identity-access` (BC-1). `POST /tenants` es público
+(exento de auth en el middleware). Suite verde: unitarias derivadas de los Gherkin +
+integración PGlite (UNIQUE del correo de registro, RLS de usuario). Decisiones tomadas al
+implementar, **para ratificación del dominio**:
+
+1. **Onboarding en un solo paso.** El contrato hace el alta en un único `POST /tenants`
+   (empresa + administrador + `aceptaTratamientoDatos`). La **verificación de correo por
+   enlace (R2)** y su expiración NO se modelan aún (el contrato no las expone); se difieren
+   como flujo posterior. El consentimiento (R3) sí es obligatorio: sin él no se crea nada.
+2. **NIT opcional.** Se respeta la regla R1/MVP (NIT opcional) aunque el `RegistrarTenantRequest`
+   del OpenAPI lo marque `required`. *Alternativa abierta:* quitar `nit` de `required` en el contrato.
+3. **Versión de la política.** El contrato no envía la versión aceptada; se registra la
+   versión vigente del servidor (`v1.0`) como evidencia (R4).
+4. **Suscripción Free (R6).** Se modela como `plan` en el Tenant (no un agregado Suscripción
+   aparte; spec-013 lo profundizará).
+5. **Evento.** Se emite `TenantCreado` (candidato a añadir al AsyncAPI junto a `UsuarioInvitado`).

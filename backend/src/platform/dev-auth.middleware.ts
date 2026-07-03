@@ -18,6 +18,7 @@ import { verificarJwtHS256 } from "./jwt";
 interface RequestLike {
   headers: Record<string, string | string[] | undefined>;
   url?: string;
+  method?: string;
   /** Express conserva aquí la URL completa aunque el middleware esté montado en un sub-path. */
   originalUrl?: string;
   tenantId?: string;
@@ -43,8 +44,17 @@ function rechazar401(res: ResponseLike): void {
 }
 
 export function devAuthMiddleware(req: RequestLike, res: ResponseLike, next: () => void): void {
+  const ruta = (req.originalUrl ?? req.url ?? "").split("?")[0];
+
   // El health check no requiere autenticación (probes de infraestructura).
-  if ((req.originalUrl ?? req.url ?? "").split("?")[0].endsWith("/health")) {
+  if (ruta.endsWith("/health")) {
+    next();
+    return;
+  }
+
+  // spec-001: el onboarding de Empresa (POST /tenants) es PÚBLICO (security: [] en el contrato):
+  // aún no existe tenant ni sesión. El resto de /tenants (p. ej. GET /me) sí requiere auth.
+  if ((req.method ?? "").toUpperCase() === "POST" && ruta.endsWith("/tenants")) {
     next();
     return;
   }
