@@ -1,0 +1,12 @@
+@import "tailwindcss";
+
+/* Tokens del portal: sobrios, alta legibilidad; el color fuerte lo pone el semáforo. */
+@theme {
+  --color-marca-50: #eef6ff;
+  --color-marca-600: #1d4ed8;
+  --color-marca-700: #1e40af;
+}
+
+body {
+  @apply bg-slate-50 text-slate-900 antialiased;
+}

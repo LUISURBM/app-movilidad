@@ -48,6 +48,36 @@ jobs:
       - name: Suite completa (142 tests)
         run: pnpm test
 
+  frontend_web:
+    name: Web — portal admin (typecheck + tests + build)
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Instalar pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 10
+
+      - name: Node 22
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Instalar dependencias
+        run: pnpm install
+
+      - name: Typecheck
+        run: pnpm --filter @fleetspecial/web typecheck
+
+      - name: Tests (formato, semáforo, errores RFC 7807, guardia)
+        run: pnpm --filter @fleetspecial/web test
+
+      - name: Build de producción
+        run: pnpm --filter @fleetspecial/web build
+
   sync_core:
     name: Mobile — sync_core (Dart puro, analyze + 13 escenarios)
     runs-on: ubuntu-latest

@@ -8,6 +8,9 @@
     "test": "pnpm --filter @fleetspecial/backend test",
     "test:unit": "pnpm --filter @fleetspecial/backend test:unit",
     "typecheck": "pnpm --filter @fleetspecial/backend typecheck",
-    "start:backend": "pnpm --filter @fleetspecial/backend start:dev"
+    "start:backend": "pnpm --filter @fleetspecial/backend start:dev",
+    "dev:web": "pnpm --filter @fleetspecial/web dev",
+    "test:web": "pnpm --filter @fleetspecial/web test",
+    "typecheck:web": "pnpm --filter @fleetspecial/web typecheck"
   }
 }

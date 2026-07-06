@@ -190,6 +190,52 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/catalogo/tipos": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Listar los Tipos de documento del tenant */
+        get: operations["listarTiposDocumento"];
+        put?: never;
+        /**
+         * Agregar un Tipo de documento al catálogo
+         * @description spec-005 R2/R10. El catálogo es configurable por tenant sin redeploy:
+         *     cambios normativos se resuelven agregando o desactivando Tipos.
+         */
+        post: operations["agregarTipoDocumento"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/catalogo/tipos/{codigo}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                codigo: string;
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        /**
+         * Actualizar un Tipo (activar/desactivar, requerido)
+         * @description spec-005 R10. Desactivar un Tipo impide registrar nuevos Documentos de ese
+         *     Tipo sin afectar los existentes. `requerido` alimenta la invariante I3
+         *     (requerido ausente ⇒ Semáforo rojo).
+         */
+        patch: operations["actualizarTipoDocumento"];
+        trace?: never;
+    };
     "/documentos": {
         parameters: {
             query?: never;
@@ -684,6 +730,27 @@ export interface components {
                 vencimiento?: string;
             };
             semaforo?: components["schemas"]["Semaforo"];
+        };
+        TipoDocumentoCatalogo: {
+            /** @description P. ej. SOAT, RTM, LICENCIA. */
+            codigo: string;
+            /** @enum {string} */
+            aplicaA: "vehiculo" | "conductor";
+            /** @description Alimenta la invariante I3 (ausente ⇒ rojo). */
+            requerido: boolean;
+            activo: boolean;
+        };
+        AgregarTipoDocumentoRequest: {
+            codigo: string;
+            /** @enum {string} */
+            aplicaA: "vehiculo" | "conductor";
+            /** @default false */
+            requerido: boolean;
+        };
+        /** @description Campos opcionales; solo se actualiza lo enviado. */
+        ActualizarTipoDocumentoRequest: {
+            activo?: boolean;
+            requerido?: boolean;
         };
         RegistrarDocumentoRequest: {
             sujeto: components["schemas"]["SujetoRef"];
@@ -1329,6 +1396,90 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["Conductor"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            404: components["responses"]["NotFound"];
+        };
+    };
+    listarTiposDocumento: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Tipos del catálogo (activos e inactivos). */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TipoDocumentoCatalogo"][];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+        };
+    };
+    agregarTipoDocumento: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["AgregarTipoDocumentoRequest"];
+            };
+        };
+        responses: {
+            /** @description Tipo agregado. */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TipoDocumentoCatalogo"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            /** @description Ya existe un Tipo con ese código en el tenant. */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            422: components["responses"]["ValidationError"];
+        };
+    };
+    actualizarTipoDocumento: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                codigo: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ActualizarTipoDocumentoRequest"];
+            };
+        };
+        responses: {
+            /** @description Tipo actualizado. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TipoDocumentoCatalogo"];
                 };
             };
             401: components["responses"]["Unauthorized"];
