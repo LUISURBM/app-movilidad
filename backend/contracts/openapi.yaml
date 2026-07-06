@@ -66,7 +66,7 @@ tags:
   - name: Combustible
     description: Registro de tanqueo append-only (offline). spec-011.
   - name: Mantenimiento
-    description: Programación y registro de mantenimiento. spec-012 (Draft).
+    description: Umbrales, programación preventiva y registro de mantenimiento. spec-012.
   - name: Sincronización
     description: Pull/push para la app del conductor offline. spec-010, spec-011.
 
@@ -812,6 +812,97 @@ paths:
         '422': { $ref: '#/components/responses/ValidationError' }
 
   # ───────────────────────── spec-010/011 Sincronización ─────────────────────────
+  # ───────────────────────── spec-012 Mantenimiento ─────────────────────────
+  /mantenimiento/umbrales:
+    get:
+      tags: [Mantenimiento]
+      summary: Listar Umbrales de mantenimiento con su estado de ciclo
+      description: |
+        spec-012. Un Umbral por Vehículo (por km y/o por meses). `pendiente` indica
+        preventivo programado sin ejecutar (P6/R8); `vencido`, fecha objetivo alcanzada
+        sin ejecución (P7/R3). El vencido **advierte, no bloquea** (R9).
+      operationId: listarUmbralesMantenimiento
+      responses:
+        '200':
+          description: Umbrales del tenant (uno por Vehículo con Umbral definido).
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: '#/components/schemas/UmbralMantenimiento' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+
+  /mantenimiento/umbrales/{vehiculoId}:
+    parameters:
+      - $ref: '#/components/parameters/VehiculoId'
+    put:
+      tags: [Mantenimiento]
+      summary: Definir (o redefinir) el Umbral de mantenimiento del Vehículo
+      description: |
+        spec-012 R1: por kilometraje (cada N km), por fecha (cada T meses), o ambos.
+        Redefinir REEMPLAZA el ciclo (upsert por Vehículo). Si se define por meses sin
+        `baseFecha`, el servidor usa la fecha actual como base. `baseKm` por defecto 0:
+        envíe el odómetro actual para no disparar el preventivo de inmediato.
+      operationId: definirUmbralMantenimiento
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/DefinirUmbralMantenimientoRequest' }
+      responses:
+        '200':
+          description: Umbral definido/redefinido.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/UmbralMantenimiento' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '422': { $ref: '#/components/responses/ValidationError' }
+
+  /mantenimiento/ejecuciones:
+    post:
+      tags: [Mantenimiento]
+      summary: Registrar la ejecución del mantenimiento preventivo
+      description: |
+        spec-012 R6: reinicia el ciclo del Umbral desde la nueva base (odómetro y fecha
+        de hoy) y emite `MantenimientoRegistrado`. Limpia `pendiente` y `vencido`.
+      operationId: registrarEjecucionMantenimiento
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/RegistrarMantenimientoRequest' }
+      responses:
+        '200':
+          description: Ciclo reiniciado; devuelve el Umbral actualizado.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/UmbralMantenimiento' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '422': { $ref: '#/components/responses/ValidationError' }
+
+  /mantenimiento/correctivos:
+    post:
+      tags: [Mantenimiento]
+      summary: Registrar un mantenimiento correctivo (reactivo)
+      description: |
+        spec-012 R7: ante una falla, con costo COP y odómetro; no depende del Umbral
+        y emite `MantenimientoRegistrado`.
+      operationId: registrarMantenimientoCorrectivo
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/RegistrarMantenimientoRequest' }
+      responses:
+        '201':
+          description: Correctivo registrado.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/MantenimientoRegistradoResponse' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '422': { $ref: '#/components/responses/ValidationError' }
+
   /sync/pull:
     get:
       tags: [Sincronización]
@@ -1339,6 +1430,43 @@ components:
         tanqueadoEn: { type: string, format: date-time }
         clientId: { type: string, format: uuid, description: 'UUID del cambio para idempotencia (append-only).' }
       required: [vehiculoId, litros, valor, odometro, clientId]
+
+    UmbralMantenimiento:
+      type: object
+      description: Umbral de mantenimiento del Vehículo y estado del ciclo (spec-012).
+      properties:
+        umbralId: { type: string, format: uuid }
+        vehiculoId: { type: string, format: uuid }
+        cadaKm: { type: integer, minimum: 1, description: Intervalo en km (P6). }
+        baseKm: { type: integer, minimum: 0, description: Base de km del ciclo actual. }
+        cadaMeses: { type: integer, minimum: 1, description: Intervalo en meses (P7). }
+        baseFecha: { type: string, format: date, description: Base de fecha del ciclo actual. }
+        pendiente: { type: boolean, description: Preventivo programado sin ejecutar (R8). }
+        vencido: { type: boolean, description: Fecha objetivo alcanzada sin ejecución (R3). }
+      required: [umbralId, vehiculoId, baseKm, pendiente, vencido]
+
+    DefinirUmbralMantenimientoRequest:
+      type: object
+      description: Debe definirse por km, por meses, o ambos (spec-012 R1).
+      properties:
+        cadaKm: { type: integer, minimum: 1 }
+        baseKm: { type: integer, minimum: 0, description: 'Recomendado: el odómetro actual.' }
+        cadaMeses: { type: integer, minimum: 1 }
+        baseFecha: { type: string, format: date, description: 'Por defecto, la fecha actual.' }
+
+    RegistrarMantenimientoRequest:
+      type: object
+      properties:
+        vehiculoId: { type: string, format: uuid }
+        odometro: { type: integer, minimum: 0, description: Lectura al ejecutar el mantenimiento. }
+        costo: { $ref: '#/components/schemas/Money' }
+      required: [vehiculoId, odometro, costo]
+
+    MantenimientoRegistradoResponse:
+      type: object
+      properties:
+        mantenimientoId: { type: string, format: uuid }
+      required: [mantenimientoId]
 
     Tanqueo:
       type: object

@@ -20,7 +20,7 @@ En `/login`: URL de la API (`http://localhost:3000/v1`) + token. Se valida contr
 ## Estructura (docs/09 §4)
 
 - `app/` — rutas: `login/` pública; `(portal)/` autenticada (guardia en su `layout.tsx`).
-- `features/` — una carpeta por bounded context (cumplimiento, vehiculos, conductores, documentos, servicios, combustible, usuarios): hooks de datos (TanStack Query) + formularios.
+- `features/` — una carpeta por bounded context (cumplimiento, vehiculos, conductores, documentos, servicios, combustible, mantenimiento, usuarios): hooks de datos (TanStack Query) + formularios.
 - `shared/ui/` — design system mínimo (`SemaforoBadge`, `Tabla`, `Modal`, `ProblemAlert`…).
 - `lib/` — sesión + cliente API (`api.tsx`), presentación es-CO (`format.ts`).
 

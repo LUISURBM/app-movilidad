@@ -1,11 +1,13 @@
 /**
  * AppModule — composición raíz del monolito modular (ADR-0001).
  *
- * Une los dos bounded contexts CORE y los workers de plataforma:
+ * Une los bounded contexts y los workers de plataforma:
  *  - Compliance & Documents (specs 005/006/007)
  *  - Service Scheduling (specs 008/009), que consume el Semáforo vía ACL
- *  - Plataforma: dispatcher del outbox (ADR-0004) y job diario de vencimientos
- *    (spec-006 R8), ambos con adaptadores in-memory en esta variante dev.
+ *  - Fleet/Driver/Identity/Fuel y Maintenance (spec-012: REST /mantenimiento,
+ *    costura P6 a OdometroActualizado y job diario P7)
+ *  - Plataforma: dispatcher del outbox (ADR-0004) y jobs diarios (vencimientos
+ *    spec-006 R8; mantenimiento spec-012 P7), in-memory en esta variante dev.
  *
  * Autenticación: middleware DEV por headers (stand-in del guard JWT del epic E0).
  * El tenant SIEMPRE sale del contexto de auth, nunca del body (ADR-0008).
@@ -26,7 +28,9 @@ import { ServiceSchedulingModule } from "./modules/service-scheduling/service-sc
 import { FleetManagementModule } from "./modules/fleet-management/fleet-management.module";
 import { DriverManagementModule } from "./modules/driver-management/driver-management.module";
 import { IdentityAccessModule } from "./modules/identity-access/identity-access.module";
+import { MaintenanceManagementModule } from "./modules/maintenance-management/maintenance-management.module";
 import { EvaluarVencimientos } from "./modules/compliance-documents/application/use-cases";
+import { EvaluarVencimientosPorFecha } from "./modules/maintenance-management/application/use-cases";
 import { devAuthMiddleware } from "./platform/dev-auth.middleware";
 import {
   InMemoryOutboxStore,
@@ -47,6 +51,7 @@ import { SystemClock } from "./shared/kernel";
 export const TENANT_REGISTRY = Symbol("TENANT_REGISTRY");
 export const OUTBOX_DISPATCHER = Symbol("OUTBOX_DISPATCHER");
 export const DAILY_COMPLIANCE_JOB = Symbol("DAILY_COMPLIANCE_JOB");
+export const DAILY_MAINTENANCE_JOB = Symbol("DAILY_MAINTENANCE_JOB");
 
 @Controller()
 class HealthController {
@@ -62,24 +67,32 @@ class PlatformWorkers implements OnApplicationBootstrap, OnApplicationShutdown {
 
   constructor(
     private readonly dispatcher: OutboxDispatcher,
-    private readonly dailyJob: DailyTenantJob,
+    private readonly dailyJobs: DailyTenantJob[],
     private readonly pollMs: number,
   ) {}
 
   onApplicationBootstrap(): void {
-    this.dailyJob.start();
+    for (const job of this.dailyJobs) job.start();
     this.pollTimer = setInterval(() => void this.dispatcher.despacharUnaVez(), this.pollMs);
     (this.pollTimer as { unref?: () => void }).unref?.();
   }
 
   onApplicationShutdown(): void {
-    this.dailyJob.stop();
+    for (const job of this.dailyJobs) job.stop();
     if (this.pollTimer) clearInterval(this.pollTimer);
   }
 }
 
 @Module({
-  imports: [ComplianceDocumentsModule, ServiceSchedulingModule, FleetManagementModule, DriverManagementModule, IdentityAccessModule],
+  imports: [
+    ComplianceDocumentsModule,
+    ServiceSchedulingModule,
+    FleetManagementModule,
+    DriverManagementModule,
+    IdentityAccessModule,
+    // BC-7 (spec-012): REST /mantenimiento + costura P6 (OdometroActualizado).
+    MaintenanceManagementModule,
+  ],
   controllers: [HealthController],
   providers: [
     // Tenants activos: in-memory desde env (el onboarding spec-001 traerá la fuente real).
@@ -116,11 +129,18 @@ class PlatformWorkers implements OnApplicationBootstrap, OnApplicationShutdown {
       useFactory: (registry: TenantRegistry, evaluar: EvaluarVencimientos) =>
         new DailyTenantJob("evaluar-vencimientos", registry, (tenant) => evaluar.execute(tenant)),
     },
+    // Job diario de mantenimiento (spec-012 P7): marca vencidos por fecha objetivo.
+    {
+      provide: DAILY_MAINTENANCE_JOB,
+      inject: [TENANT_REGISTRY, EvaluarVencimientosPorFecha],
+      useFactory: (registry: TenantRegistry, evaluar: EvaluarVencimientosPorFecha) =>
+        new DailyTenantJob("evaluar-mantenimiento", registry, (tenant) => evaluar.execute(tenant)),
+    },
     {
       provide: PlatformWorkers,
-      inject: [OUTBOX_DISPATCHER, DAILY_COMPLIANCE_JOB],
-      useFactory: (d: OutboxDispatcher, j: DailyTenantJob) =>
-        new PlatformWorkers(d, j, Number(process.env.OUTBOX_POLL_MS ?? 5000)),
+      inject: [OUTBOX_DISPATCHER, DAILY_COMPLIANCE_JOB, DAILY_MAINTENANCE_JOB],
+      useFactory: (d: OutboxDispatcher, jc: DailyTenantJob, jm: DailyTenantJob) =>
+        new PlatformWorkers(d, [jc, jm], Number(process.env.OUTBOX_POLL_MS ?? 5000)),
     },
   ],
 })

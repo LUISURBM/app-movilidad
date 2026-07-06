@@ -119,3 +119,31 @@ ratificación del dominio** (la spec pasó de Draft a Implemented con autorizaci
    crearon endpoints. El módulo expone los casos de uso, listos para el controller cuando el
    contrato defina las rutas. El módulo aún no se importa en AppModule (sin REST ni disparadores).
 4. **Sin bloqueo (R9).** El vencido queda como estado consultable (advierte); no bloquea.
+
+## Costuras cerradas (2026-07-06)
+
+Los tres pendientes de arriba quedaron **cableados**:
+
+1. **P6 cerrada.** Fleet expone el puerto `PublicadorSuscribible` (suscripción in-process a
+   sus eventos de dominio, sin conocer a los suscriptores). Maintenance importa
+   FleetManagementModule y registra `CosturaOdometroMantenimiento`
+   (`infrastructure/costura-odometro.ts`): cada `OdometroActualizado` — venga de Tanqueo
+   (spec-011 vía ACL de Fuel), de Servicio o del registro manual — dispara
+   `EvaluarUmbralPorOdometro`. Entrega al-menos-una-vez tolerada por la idempotencia R8;
+   un suscriptor que falla NO tumba el comando del odómetro (se advierte y el próximo
+   avance re-evalúa). En la variante SQL de producción, el equivalente es un sink del
+   dispatcher del outbox (ADR-0004) con la misma reacción — **pendiente solo esa variante**.
+2. **P7 cerrada.** `DAILY_MAINTENANCE_JOB` en AppModule: el `DailyTenantJob`
+   "evaluar-mantenimiento" corre `EvaluarVencimientosPorFecha` por tenant cada medianoche
+   UTC, junto al de Compliance.
+3. **REST creado.** El contrato ahora define `/mantenimiento` (GET umbrales, PUT
+   umbrales/{vehiculoId} upsert, POST ejecuciones 200 con el Umbral reiniciado, POST
+   correctivos 201) y `MantenimientoController` lo implementa; el módulo quedó importado
+   en AppModule. Decisiones del contrato: `costo` viaja como `Money` (COP); si se define
+   por meses sin `baseFecha`, la base es HOY (reloj de dominio); `baseKm` por defecto 0 —
+   la UI envía el odómetro actual; redefinir el Umbral REEMPLAZA el ciclo; el historial de
+   ejecuciones/correctivos vive solo como eventos (no hay GET de historial — V1 si hace falta).
+4. **Portal web:** página Mantenimiento (umbral por vehículo, "próximo preventivo en N km",
+   registrar ejecución/correctivo). Verificación: costura.spec 5 ✓, mantenimiento.e2e 9 ✓
+   (HTTP real: umbral → odómetro 152.000 → pendiente → ejecución reinicia → re-programa),
+   maintenance.spec 8 ✓, integración PG 4 ✓, suite previa sin regresiones.

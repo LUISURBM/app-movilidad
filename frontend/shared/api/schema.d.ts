@@ -505,6 +505,95 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/mantenimiento/umbrales": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Listar Umbrales de mantenimiento con su estado de ciclo
+         * @description spec-012. Un Umbral por Vehículo (por km y/o por meses). `pendiente` indica
+         *     preventivo programado sin ejecutar (P6/R8); `vencido`, fecha objetivo alcanzada
+         *     sin ejecución (P7/R3). El vencido **advierte, no bloquea** (R9).
+         */
+        get: operations["listarUmbralesMantenimiento"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/mantenimiento/umbrales/{vehiculoId}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                vehiculoId: components["parameters"]["VehiculoId"];
+            };
+            cookie?: never;
+        };
+        get?: never;
+        /**
+         * Definir (o redefinir) el Umbral de mantenimiento del Vehículo
+         * @description spec-012 R1: por kilometraje (cada N km), por fecha (cada T meses), o ambos.
+         *     Redefinir REEMPLAZA el ciclo (upsert por Vehículo). Si se define por meses sin
+         *     `baseFecha`, el servidor usa la fecha actual como base. `baseKm` por defecto 0:
+         *     envíe el odómetro actual para no disparar el preventivo de inmediato.
+         */
+        put: operations["definirUmbralMantenimiento"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/mantenimiento/ejecuciones": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Registrar la ejecución del mantenimiento preventivo
+         * @description spec-012 R6: reinicia el ciclo del Umbral desde la nueva base (odómetro y fecha
+         *     de hoy) y emite `MantenimientoRegistrado`. Limpia `pendiente` y `vencido`.
+         */
+        post: operations["registrarEjecucionMantenimiento"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/mantenimiento/correctivos": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Registrar un mantenimiento correctivo (reactivo)
+         * @description spec-012 R7: ante una falla, con costo COP y odómetro; no depende del Umbral
+         *     y emite `MantenimientoRegistrado`.
+         */
+        post: operations["registrarMantenimientoCorrectivo"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/sync/pull": {
         parameters: {
             query?: never;
@@ -912,6 +1001,51 @@ export interface components {
              * @description UUID del cambio para idempotencia (append-only).
              */
             clientId: string;
+        };
+        /** @description Umbral de mantenimiento del Vehículo y estado del ciclo (spec-012). */
+        UmbralMantenimiento: {
+            /** Format: uuid */
+            umbralId: string;
+            /** Format: uuid */
+            vehiculoId: string;
+            /** @description Intervalo en km (P6). */
+            cadaKm?: number;
+            /** @description Base de km del ciclo actual. */
+            baseKm: number;
+            /** @description Intervalo en meses (P7). */
+            cadaMeses?: number;
+            /**
+             * Format: date
+             * @description Base de fecha del ciclo actual.
+             */
+            baseFecha?: string;
+            /** @description Preventivo programado sin ejecutar (R8). */
+            pendiente: boolean;
+            /** @description Fecha objetivo alcanzada sin ejecución (R3). */
+            vencido: boolean;
+        };
+        /** @description Debe definirse por km, por meses, o ambos (spec-012 R1). */
+        DefinirUmbralMantenimientoRequest: {
+            cadaKm?: number;
+            /** @description Recomendado: el odómetro actual. */
+            baseKm?: number;
+            cadaMeses?: number;
+            /**
+             * Format: date
+             * @description Por defecto, la fecha actual.
+             */
+            baseFecha?: string;
+        };
+        RegistrarMantenimientoRequest: {
+            /** Format: uuid */
+            vehiculoId: string;
+            /** @description Lectura al ejecutar el mantenimiento. */
+            odometro: number;
+            costo: components["schemas"]["Money"];
+        };
+        MantenimientoRegistradoResponse: {
+            /** Format: uuid */
+            mantenimientoId: string;
         };
         Tanqueo: {
             /** Format: uuid */
@@ -1931,6 +2065,108 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["Tanqueo"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            422: components["responses"]["ValidationError"];
+        };
+    };
+    listarUmbralesMantenimiento: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Umbrales del tenant (uno por Vehículo con Umbral definido). */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["UmbralMantenimiento"][];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+        };
+    };
+    definirUmbralMantenimiento: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                vehiculoId: components["parameters"]["VehiculoId"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["DefinirUmbralMantenimientoRequest"];
+            };
+        };
+        responses: {
+            /** @description Umbral definido/redefinido. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["UmbralMantenimiento"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            422: components["responses"]["ValidationError"];
+        };
+    };
+    registrarEjecucionMantenimiento: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["RegistrarMantenimientoRequest"];
+            };
+        };
+        responses: {
+            /** @description Ciclo reiniciado; devuelve el Umbral actualizado. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["UmbralMantenimiento"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            404: components["responses"]["NotFound"];
+            422: components["responses"]["ValidationError"];
+        };
+    };
+    registrarMantenimientoCorrectivo: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["RegistrarMantenimientoRequest"];
+            };
+        };
+        responses: {
+            /** @description Correctivo registrado. */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MantenimientoRegistradoResponse"];
                 };
             };
             401: components["responses"]["Unauthorized"];

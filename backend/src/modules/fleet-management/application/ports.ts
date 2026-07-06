@@ -21,3 +21,19 @@ export interface VehiculoRepository {
 export interface EventPublisher {
   publish(tenant: TenantId, eventos: readonly DomainEvent[]): Promise<void>;
 }
+
+/**
+ * Suscripción in-process a los eventos de Fleet: consumidores aguas abajo
+ * (p. ej. Maintenance — spec-012 P6 reacciona a `OdometroActualizado`) se
+ * registran en el composition root SIN que Fleet los conozca. En la variante
+ * SQL el equivalente es un sink del dispatcher del outbox (ADR-0004); este
+ * puerto cubre el wiring in-memory de dev y las pruebas.
+ */
+export type SuscriptorEventosFleet = (
+  tenant: TenantId,
+  evento: DomainEvent,
+) => Promise<void>;
+
+export interface PublicadorSuscribible extends EventPublisher {
+  suscribir(suscriptor: SuscriptorEventosFleet): void;
+}

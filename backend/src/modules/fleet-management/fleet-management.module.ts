@@ -51,6 +51,9 @@ const armar = (vehiculos: never, publisher: never, ids: never): FleetDeps =>
     { provide: RegistrarVehiculo, inject: DEPS, useFactory: (...a: Parameters<typeof armar>) => new RegistrarVehiculo(armar(...a)) },
     { provide: ActualizarOdometro, inject: DEPS, useFactory: (...a: Parameters<typeof armar>) => new ActualizarOdometro(armar(...a)) },
   ],
-  exports: [RegistrarVehiculo, ActualizarOdometro, VEHICULO_REPOSITORY],
+  // FLEET_EVENT_PUBLISHER se exporta para que los consumidores aguas abajo
+  // (Maintenance, spec-012 P6) se SUSCRIBAN a los eventos de Fleet in-process;
+  // Fleet no conoce a sus suscriptores (puerto PublicadorSuscribible).
+  exports: [RegistrarVehiculo, ActualizarOdometro, VEHICULO_REPOSITORY, FLEET_EVENT_PUBLISHER],
 })
 export class FleetManagementModule {}

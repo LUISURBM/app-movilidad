@@ -17,6 +17,7 @@ const SECCIONES: { href: string; titulo: string }[] = [
   { href: "/conductores", titulo: "Conductores" },
   { href: "/documentos", titulo: "Documentos" },
   { href: "/combustible", titulo: "Combustible" },
+  { href: "/mantenimiento", titulo: "Mantenimiento" },
   { href: "/usuarios", titulo: "Usuarios" },
   { href: "/configuracion/catalogo", titulo: "Catálogo" },
 ];
