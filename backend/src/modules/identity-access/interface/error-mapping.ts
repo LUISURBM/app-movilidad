@@ -19,8 +19,10 @@ const CODE_TO_STATUS: Record<string, number> = {
   // 401 / 410 / 429 / 503 (spec-015)
   credenciales_invalidas: 401,
   invitacion_no_valida: 410,
+  recuperacion_no_valida: 410,
   demasiados_intentos: 429,
   auth_no_configurada: 503,
+  notificacion_no_disponible: 503,
   // 422 Unprocessable Entity (validaciones)
   tratamiento_no_aceptado: 422,
   correo_invalido: 422,

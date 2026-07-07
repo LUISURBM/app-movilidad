@@ -63,7 +63,10 @@ export function devAuthMiddleware(req: RequestLike, res: ResponseLike, next: () 
   // contrato) — ocurren antes de tener sesión. /auth/password sí exige auth.
   if (
     (req.method ?? "").toUpperCase() === "POST" &&
-    (ruta.endsWith("/auth/login") || ruta.endsWith("/auth/aceptar-invitacion"))
+    (ruta.endsWith("/auth/login") ||
+      ruta.endsWith("/auth/aceptar-invitacion") ||
+      ruta.endsWith("/auth/recuperar") ||
+      ruta.endsWith("/auth/restablecer"))
   ) {
     next();
     return;

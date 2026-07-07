@@ -24,7 +24,11 @@ import {
 export default function PaginaLogin() {
   const router = useRouter();
   const { iniciarSesion } = useSesion();
-  const [modo, setModo] = useState<"credenciales" | "token">("credenciales");
+  const [modo, setModo] = useState<
+    "credenciales" | "token" | "recuperar" | "restablecer"
+  >("credenciales");
+  const [codigoRecuperacion, setCodigoRecuperacion] = useState("");
+  const [aviso, setAviso] = useState<string | null>(null);
   const [baseUrl, setBaseUrl] = useState(BASE_URL_POR_DEFECTO);
   const [correo, setCorreo] = useState("");
   const [password, setPassword] = useState("");
@@ -37,9 +41,36 @@ export default function PaginaLogin() {
   async function enviar(e: FormEvent) {
     e.preventDefault();
     setError(null);
+    setAviso(null);
     setValidando(true);
     const url = baseUrl.trim().replace(/\/$/, "");
     try {
+      if (modo === "recuperar") {
+        // spec-015 recuperación: 204 siempre (anti-enumeración).
+        const res = await fetch(`${url}/auth/recuperar`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ correo: correo.trim() }),
+        });
+        if (!res.ok) throw new Error("No se pudo solicitar la recuperación. Intente más tarde.");
+        setModo("restablecer");
+        setAviso("Si el correo existe, llegará un código (vence en 1 hora). Péguelo abajo.");
+        return;
+      }
+      if (modo === "restablecer") {
+        const res = await fetch(`${url}/auth/restablecer`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ codigo: codigoRecuperacion.trim(), password }),
+        });
+        if (res.status === 410) throw new Error("El código no existe, ya fue usado o venció.");
+        if (!res.ok) throw new Error("No se pudo restablecer (revise la contraseña: mínimo 10 caracteres).");
+        setModo("credenciales");
+        setCodigoRecuperacion("");
+        setPassword("");
+        setAviso("Contraseña restablecida: ingrese con la nueva.");
+        return;
+      }
       const sesion =
         modo === "credenciales"
           ? await iniciarSesionConCredenciales(url, {
@@ -82,6 +113,37 @@ export default function PaginaLogin() {
               />
             </Campo>
 
+            {modo === "recuperar" ? (
+              <Campo etiqueta="Correo de su cuenta" requerido>
+                <Entrada
+                  type="email"
+                  value={correo}
+                  onChange={(e) => setCorreo(e.target.value)}
+                  required
+                />
+              </Campo>
+            ) : null}
+            {modo === "restablecer" ? (
+              <>
+                <Campo etiqueta="Código recibido por correo" requerido>
+                  <Entrada
+                    value={codigoRecuperacion}
+                    onChange={(e) => setCodigoRecuperacion(e.target.value)}
+                    required
+                  />
+                </Campo>
+                <Campo etiqueta="Contraseña nueva (mínimo 10 caracteres)" requerido>
+                  <Entrada
+                    type="password"
+                    value={password}
+                    onChange={(e) => setPassword(e.target.value)}
+                    autoComplete="new-password"
+                    minLength={10}
+                    required
+                  />
+                </Campo>
+              </>
+            ) : null}
             {modo === "credenciales" ? (
               <>
                 <Campo etiqueta="Correo" requerido>
@@ -126,19 +188,44 @@ export default function PaginaLogin() {
               </Campo>
             )}
 
+            {aviso ? (
+              <p className="rounded-lg border border-green-200 bg-green-50 px-3.5 py-2.5 text-sm text-green-800">
+                {aviso}
+              </p>
+            ) : null}
             <ProblemAlert problema={error} />
             <BotonPrimario type="submit" disabled={validando} className="w-full">
-              {validando ? "Validando…" : "Ingresar"}
+              {validando
+                ? "Procesando…"
+                : modo === "recuperar"
+                  ? "Enviar código"
+                  : modo === "restablecer"
+                    ? "Restablecer"
+                    : "Ingresar"}
             </BotonPrimario>
           </form>
         </Tarjeta>
+        {modo === "credenciales" ? (
+          <button
+            type="button"
+            onClick={() => {
+              setModo("recuperar");
+              setError(null);
+              setAviso(null);
+            }}
+            className="mt-3 w-full text-center text-xs text-slate-500 hover:text-slate-700"
+          >
+            ¿Olvidó su contraseña?
+          </button>
+        ) : null}
         <button
           type="button"
           onClick={() => {
             setModo(modo === "credenciales" ? "token" : "credenciales");
             setError(null);
+            setAviso(null);
           }}
-          className="mt-4 w-full text-center text-xs text-slate-400 hover:text-slate-600"
+          className="mt-3 w-full text-center text-xs text-slate-400 hover:text-slate-600"
         >
           {modo === "credenciales"
             ? "¿Soporte o desarrollo? Ingresar con token"

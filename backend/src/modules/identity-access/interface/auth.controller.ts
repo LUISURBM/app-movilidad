@@ -14,6 +14,10 @@ import {
   IniciarSesion,
   SesionCreada,
 } from "../application/auth.use-cases";
+import {
+  RestablecerPassword,
+  SolicitarRecuperacion,
+} from "../application/recuperacion.use-cases";
 import { tenantToDto, usuarioToDto } from "./mappers";
 import { UsuarioDto } from "./dtos";
 import { problemFromDomainError } from "./error-mapping";
@@ -59,8 +63,33 @@ export class AuthController {
     @Inject(AceptarInvitacionConCodigo)
     private readonly aceptarInvitacion: AceptarInvitacionConCodigo,
     @Inject(CambiarPassword) private readonly cambiarPassword: CambiarPassword,
+    @Inject(SolicitarRecuperacion) private readonly solicitarRecuperacion: SolicitarRecuperacion,
+    @Inject(RestablecerPassword) private readonly restablecerPassword: RestablecerPassword,
     @Inject(TENANT_CONTEXT) private readonly ctx: TenantContext,
   ) {}
+
+  @Post("recuperar")
+  @HttpCode(204)
+  async recuperar(@Body() body: { correo?: string }): Promise<void> {
+    const r = await this.solicitarRecuperacion.execute({ correo: body.correo ?? "" });
+    if (!r.ok) {
+      const problem = problemFromDomainError(r.error, "/v1/auth/recuperar");
+      throw new HttpException(problem, problem.status);
+    }
+  }
+
+  @Post("restablecer")
+  @HttpCode(204)
+  async restablecer(@Body() body: { codigo?: string; password?: string }): Promise<void> {
+    const r = await this.restablecerPassword.execute({
+      codigo: body.codigo ?? "",
+      password: body.password ?? "",
+    });
+    if (!r.ok) {
+      const problem = problemFromDomainError(r.error, "/v1/auth/restablecer");
+      throw new HttpException(problem, problem.status);
+    }
+  }
 
   @Post("login")
   @HttpCode(200)

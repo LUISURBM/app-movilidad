@@ -159,6 +159,65 @@ paths:
             application/problem+json:
               schema: { $ref: '#/components/schemas/Problem' }
 
+  /auth/recuperar:
+    post:
+      tags: [Auth]
+      summary: Solicitar recuperación de contraseña (envía código por email)
+      description: |
+        spec-015 (recuperación). SIEMPRE responde 204 exista o no el correo (no
+        filtrar cuentas). Si existe credencial, envía un código de un solo uso
+        (vigencia 1 hora) al correo. Límite: 3 solicitudes por correo cada 15
+        minutos (429).
+      security: []
+      operationId: solicitarRecuperacion
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                correo: { type: string, format: email }
+              required: [correo]
+      responses:
+        '204': { description: Si el correo existe, llegará un código. }
+        '429':
+          description: Demasiadas solicitudes para ese correo.
+          content:
+            application/problem+json:
+              schema: { $ref: '#/components/schemas/Problem' }
+        '503':
+          description: Envío de correo no disponible en el servidor.
+          content:
+            application/problem+json:
+              schema: { $ref: '#/components/schemas/Problem' }
+
+  /auth/restablecer:
+    post:
+      tags: [Auth]
+      summary: Restablecer la contraseña con el código recibido
+      description: spec-015 (recuperación). Código de un solo uso; luego inicie sesión.
+      security: []
+      operationId: restablecerPassword
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                codigo: { type: string }
+                password: { type: string, format: password, minLength: 10 }
+              required: [codigo, password]
+      responses:
+        '204': { description: Contraseña restablecida; inicie sesión. }
+        '410':
+          description: Código inválido, usado o vencido.
+          content:
+            application/problem+json:
+              schema: { $ref: '#/components/schemas/Problem' }
+        '422': { $ref: '#/components/responses/ValidationError' }
+
   /auth/password:
     post:
       tags: [Auth]

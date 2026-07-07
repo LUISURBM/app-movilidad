@@ -21,6 +21,7 @@ import {
   HASHER_PASSWORD,
   IDENTITY_EVENT_PUBLISHER,
   INVITACION_REPOSITORY,
+  RECUPERACION_REPOSITORY,
   TENANT_REPOSITORY,
   USUARIO_REPOSITORY,
 } from "./interface/tokens";
@@ -55,6 +56,16 @@ import {
   CambiarPassword,
   IniciarSesion,
 } from "./application/auth.use-cases";
+import {
+  RecuperacionDeps,
+  RestablecerPassword,
+  SolicitarRecuperacion,
+} from "./application/recuperacion.use-cases";
+import { SqlRecuperacionRepository } from "./infrastructure/recuperacion.sql-adapter";
+import {
+  ConsoleCanalNotificacion,
+} from "../../platform/notificaciones";
+import { smtpCanalDesdeEnv } from "../../platform/notificaciones.infra";
 import { DataSource } from "typeorm";
 import { DATA_SOURCE, elegirAdaptador } from "../../platform/persistencia";
 import {
@@ -183,6 +194,33 @@ const armarAuth = (
     { provide: IniciarSesion, inject: AUTH_DEPS, useFactory: (...a: Parameters<typeof armarAuth>) => new IniciarSesion(armarAuth(...a)) },
     { provide: AceptarInvitacionConCodigo, inject: AUTH_DEPS, useFactory: (...a: Parameters<typeof armarAuth>) => new AceptarInvitacionConCodigo(armarAuth(...a)) },
     { provide: CambiarPassword, inject: AUTH_DEPS, useFactory: (...a: Parameters<typeof armarAuth>) => new CambiarPassword(armarAuth(...a)) },
+
+    // Recuperación de contraseña (spec-015, sección recuperación): código por
+    // email (SMTP real si está configurado; consola en dev). Tabla 0012 en
+    // postgres, in-memory (misma clase de invitaciones, instancia aparte) en dev.
+    { provide: RECUPERACION_REPOSITORY,
+      inject: [DATA_SOURCE],
+      useFactory: (ds: DataSource | null) =>
+        elegirAdaptador(ds, (d) => new SqlRecuperacionRepository(d), () => new InMemoryInvitacionRepository()),
+    },
+    {
+      provide: SolicitarRecuperacion,
+      inject: [CREDENCIAL_REPOSITORY, RECUPERACION_REPOSITORY, USUARIO_REPOSITORY, HASHER_PASSWORD, GENERADOR_CODIGOS, CLOCK],
+      useFactory: (credenciales, recuperaciones, usuarios, hasher, codigos, clock) =>
+        new SolicitarRecuperacion({
+          credenciales, recuperaciones, usuarios, hasher, codigos, clock,
+          canal: smtpCanalDesdeEnv() ?? new ConsoleCanalNotificacion(),
+        } as unknown as RecuperacionDeps),
+    },
+    {
+      provide: RestablecerPassword,
+      inject: [CREDENCIAL_REPOSITORY, RECUPERACION_REPOSITORY, USUARIO_REPOSITORY, HASHER_PASSWORD, GENERADOR_CODIGOS, CLOCK],
+      useFactory: (credenciales, recuperaciones, usuarios, hasher, codigos, clock) =>
+        new RestablecerPassword({
+          credenciales, recuperaciones, usuarios, hasher, codigos, clock,
+          canal: new ConsoleCanalNotificacion(), // restablecer no envía correo
+        } as unknown as RecuperacionDeps),
+    },
   ],
   exports: [RegistrarTenant, InvitarUsuario],
 })
