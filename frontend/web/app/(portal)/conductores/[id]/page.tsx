@@ -4,7 +4,7 @@ import { useParams } from "next/navigation";
 import { useState } from "react";
 import { useConductor } from "@/features/conductores";
 import { useCumplimientoSujeto } from "@/features/cumplimiento";
-import { FormularioDocumento, FormularioRenovacion, useDocumentos } from "@/features/documentos";
+import { CeldaAdjunto, FormularioDocumento, FormularioRenovacion, useDocumentos } from "@/features/documentos";
 import { problemaDe } from "@/lib/api";
 import { diasRestantesTexto, fecha } from "@/lib/format";
 import type { schemas } from "@fleetspecial/api";
@@ -76,7 +76,7 @@ export default function PaginaConductor() {
           <Vacio mensaje="Sin documentos registrados para este conductor." />
         ) : null}
         {documentos.isSuccess && docs.length > 0 ? (
-          <Tabla encabezados={["Tipo", "Número", "Vencimiento", "Situación", "Estado", ""]}>
+          <Tabla encabezados={["Tipo", "Número", "Vencimiento", "Situación", "Estado", "Adjunto", ""]}>
             {docs.map((d) => (
               <tr key={d.id} className="hover:bg-slate-50">
                 <td className="px-4 py-3 font-medium">{d.tipo}</td>
@@ -87,6 +87,9 @@ export default function PaginaConductor() {
                 </td>
                 <td className="px-4 py-3">
                   <SemaforoBadge estado={d.estado} />
+                </td>
+                <td className="px-4 py-3">
+                  <CeldaAdjunto documento={d} />
                 </td>
                 <td className="px-4 py-3 text-right">
                   <BotonSecundario onClick={() => setRenovando(d)}>Renovar</BotonSecundario>

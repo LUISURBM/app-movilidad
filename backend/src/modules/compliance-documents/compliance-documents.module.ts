@@ -21,6 +21,7 @@ import {
   DOCUMENTO_REPOSITORY,
   CATALOGO_TIPOS_REPOSITORY,
   EVENT_PUBLISHER,
+  ALMACEN_ADJUNTOS,
 } from "./interface/tokens";
 import { DocumentosController } from "./interface/documentos.controller";
 import { CumplimientoController } from "./interface/cumplimiento.controller";
@@ -36,6 +37,8 @@ import {
   InMemoryCatalogoTiposRepository,
   InMemoryEventPublisher,
 } from "./application/in-memory.adapters";
+import { InMemoryAlmacenAdjuntos } from "./application/adjuntos.in-memory";
+import { DescargarAdjunto, SubirAdjunto } from "./application/adjuntos.use-cases";
 import {
   ComplianceDeps,
   ConsultarDocumentosVigentes,
@@ -76,6 +79,9 @@ interface AuthedRequest {
     { provide: DOCUMENTO_REPOSITORY, useClass: InMemoryDocumentoRepository },
     { provide: CATALOGO_TIPOS_REPOSITORY, useClass: InMemoryCatalogoTiposRepository },
     { provide: EVENT_PUBLISHER, useClass: InMemoryEventPublisher },
+    // Adjuntos (spec-005 R5): in-memory en dev; FsAlmacenAdjuntos (infrastructure)
+    // o S3/MinIO en producción — mismo puerto.
+    { provide: ALMACEN_ADJUNTOS, useClass: InMemoryAlmacenAdjuntos },
 
     // Casos de uso (se arman con los puertos + plataforma).
     {
@@ -108,6 +114,10 @@ interface AuthedRequest {
       useFactory: (documentos, catalogo, publisher, clock, ids) =>
         new ConsultarDocumentosVigentes({ documentos, catalogo, publisher, clock, ids } as ComplianceDeps),
     },
+
+    // Adjuntos (spec-005 R5) — dependen solo del repo de documentos + almacén.
+    { provide: SubirAdjunto, inject: [DOCUMENTO_REPOSITORY, ALMACEN_ADJUNTOS], useFactory: (d, a) => new SubirAdjunto(d, a) },
+    { provide: DescargarAdjunto, inject: [DOCUMENTO_REPOSITORY, ALMACEN_ADJUNTOS], useFactory: (d, a) => new DescargarAdjunto(d, a) },
 
     // Catálogo de Tipos (spec-005 R2/R10) — solo dependen del repositorio.
     { provide: ListarTiposDocumento, inject: [CATALOGO_TIPOS_REPOSITORY], useFactory: (c) => new ListarTiposDocumento(c) },

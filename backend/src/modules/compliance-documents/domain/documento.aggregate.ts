@@ -148,6 +148,16 @@ export class Documento {
     return this._historico;
   }
 
+  /**
+   * Adjunta (o reemplaza) el soporte de la VIGENCIA ACTUAL (spec-005 R5).
+   * Las versiones históricas conservan su propia referencia (ver `renovar`).
+   * En la base solo vive la referencia; los bytes van al almacén por objeto
+   * aislado por tenant.
+   */
+  adjuntarSoporte(ref: string): void {
+    this._adjuntoRef = ref;
+  }
+
   /** Estado (Semáforo) del Documento a la fecha dada. spec-006 R2/R3. */
   estado(hoy: DateOnly): Semaforo {
     return this._vencimiento.estadoDesde(hoy);

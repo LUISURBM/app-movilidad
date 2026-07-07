@@ -287,10 +287,19 @@ export interface paths {
             };
             cookie?: never;
         };
-        get?: never;
+        /**
+         * Descargar el adjunto vigente del documento
+         * @description spec-005 R5. Devuelve los bytes almacenados con su Content-Type original
+         *     (PDF o imagen). 404 si el documento no existe o no tiene adjunto.
+         */
+        get: operations["descargarAdjuntoDocumento"];
         /**
          * Subir/reemplazar el archivo adjunto del documento
-         * @description spec-005. Almacenamiento aislado por tenant.
+         * @description spec-005. Almacenamiento aislado por tenant (prefijo del tenant); en la base
+         *     solo queda la referencia. Cuerpo binario con el `Content-Type` real del
+         *     archivo: se aceptan `application/pdf`, `image/jpeg` y `image/png` (otros -> 422).
+         *     Tamano maximo 5 MB (-> 413). Reemplazar aplica a la vigencia actual; las
+         *     versiones historicas conservan su propia referencia.
          */
         put: operations["subirAdjuntoDocumento"];
         post?: never;
@@ -1698,6 +1707,30 @@ export interface operations {
             404: components["responses"]["NotFound"];
         };
     };
+    descargarAdjuntoDocumento: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                documentoId: components["parameters"]["DocumentoId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Contenido del adjunto. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/octet-stream": string;
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            404: components["responses"]["NotFound"];
+        };
+    };
     subirAdjuntoDocumento: {
         parameters: {
             query?: never;
@@ -1731,6 +1764,7 @@ export interface operations {
                     "application/problem+json": components["schemas"]["Problem"];
                 };
             };
+            422: components["responses"]["ValidationError"];
         };
     };
     renovarDocumento: {

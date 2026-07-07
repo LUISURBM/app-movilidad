@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useState } from "react";
 import { rutaSujeto, useMapaSujetos } from "@/features/cumplimiento";
 import {
+  CeldaAdjunto,
   FormularioDocumento,
   FormularioRenovacion,
   useDocumentos,
@@ -73,7 +74,7 @@ export default function PaginaDocumentos() {
           />
         ) : null}
         {documentos.isSuccess && items.length > 0 ? (
-          <Tabla encabezados={["Tipo", "Sujeto", "Número", "Vencimiento", "Versión", "Estado", ""]}>
+          <Tabla encabezados={["Tipo", "Sujeto", "Número", "Vencimiento", "Versión", "Estado", "Adjunto", ""]}>
             {items.map((d) => (
               <tr key={d.id} className="hover:bg-slate-50">
                 <td className="px-4 py-3 font-medium">{d.tipo}</td>
@@ -94,6 +95,9 @@ export default function PaginaDocumentos() {
                 </td>
                 <td className="px-4 py-3">
                   <SemaforoBadge estado={d.estado} />
+                </td>
+                <td className="px-4 py-3">
+                  <CeldaAdjunto documento={d} />
                 </td>
                 <td className="px-4 py-3 text-right">
                   <BotonSecundario onClick={() => setRenovando(d)}>Renovar</BotonSecundario>

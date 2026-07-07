@@ -500,10 +500,30 @@ paths:
   /documentos/{documentoId}/adjunto:
     parameters:
       - $ref: '#/components/parameters/DocumentoId'
+    get:
+      tags: [Documentos]
+      summary: Descargar el adjunto vigente del documento
+      description: |
+        spec-005 R5. Devuelve los bytes almacenados con su Content-Type original
+        (PDF o imagen). 404 si el documento no existe o no tiene adjunto.
+      operationId: descargarAdjuntoDocumento
+      responses:
+        '200':
+          description: Contenido del adjunto.
+          content:
+            application/octet-stream:
+              schema: { type: string, format: binary }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '404': { $ref: '#/components/responses/NotFound' }
     put:
       tags: [Documentos]
       summary: Subir/reemplazar el archivo adjunto del documento
-      description: spec-005. Almacenamiento aislado por tenant.
+      description: |
+        spec-005. Almacenamiento aislado por tenant (prefijo del tenant); en la base
+        solo queda la referencia. Cuerpo binario con el `Content-Type` real del
+        archivo: se aceptan `application/pdf`, `image/jpeg` y `image/png` (otros → 422).
+        Tamaño máximo 5 MB (→ 413). Reemplazar aplica a la vigencia actual; las
+        versiones históricas conservan su propia referencia.
       operationId: subirAdjuntoDocumento
       requestBody:
         required: true
@@ -519,6 +539,7 @@ paths:
           content:
             application/problem+json:
               schema: { $ref: '#/components/schemas/Problem' }
+        '422': { $ref: '#/components/responses/ValidationError' }
 
   /documentos/{documentoId}/renovaciones:
     parameters:

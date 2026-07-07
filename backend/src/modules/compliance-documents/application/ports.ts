@@ -36,3 +36,26 @@ export interface CatalogoTiposRepository {
 export interface EventPublisher {
   publish(tenant: TenantId, eventos: readonly DomainEvent[]): Promise<void>;
 }
+
+/** Adjunto recuperado del almacén (bytes + tipo original). */
+export interface AdjuntoAlmacenado {
+  contenido: Uint8Array;
+  mime: string;
+}
+
+/**
+ * Almacén de adjuntos por objeto, AISLADO POR TENANT (spec-005 R5/R11): las
+ * claves viven bajo el prefijo del tenant y un tenant jamás resuelve refs de
+ * otro. En la base solo se guarda la referencia devuelta. Implementaciones:
+ * in-memory (dev/tests), sistema de archivos (`infrastructure/`), S3/MinIO (prod).
+ */
+export interface AlmacenAdjuntos {
+  /** Persiste el contenido y devuelve la referencia (única por contenido/versión). */
+  guardar(
+    tenant: TenantId,
+    documentoId: string,
+    contenido: Uint8Array,
+    mime: string,
+  ): Promise<{ ref: string }>;
+  obtener(tenant: TenantId, ref: string): Promise<AdjuntoAlmacenado | null>;
+}

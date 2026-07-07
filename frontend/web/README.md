@@ -29,7 +29,6 @@ Decisiones: TanStack Query para estado de servidor, sin Redux (anti-sobreingenie
 ## Deudas conscientes
 
 - **Login v0 por token pegado** (localStorage). El contrato aún no define login con credenciales; cuando exista la spec (OIDC o password), solo cambia `lib/api.tsx` + `app/login/`. Riesgo XSS de localStorage aceptado para uso interno dev.
-- **Adjuntos de documentos**: el contrato define `POST /documentos/{id}/adjunto` pero el backend no lo implementa aún; la UI no ofrece subir (solo mostraría `tieneAdjunto`).
 - **Paginación**: las listas piden `pageSize` alto y no pintan paginador (flota pequeña). Añadirlo cuando un tenant supere ~50 filas.
 - **`useMapaSujetos`** resuelve nombres con 2 listados (≤200); si la flota crece, pedir al contrato un `include` o endpoint de búsqueda.
 - **RBAC en UI**: los 403 del backend se muestran tal cual; ocultar secciones por rol cuando el JWT traiga roles al front.

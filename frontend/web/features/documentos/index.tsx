@@ -7,7 +7,7 @@
  */
 
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { useState, type FormEvent } from "react";
+import { useRef, useState, type FormEvent } from "react";
 import type { schemas } from "@fleetspecial/api";
 import { desenvolver, problemaDe, useApi } from "@/lib/api";
 import { useConductores } from "@/features/conductores";
@@ -295,6 +295,95 @@ export function FormularioRenovacion({
         </div>
       </form>
     </Modal>
+  );
+}
+
+/* ------------------------------- Adjuntos ------------------------------------ */
+
+const ADJUNTO_MAX_BYTES = 5 * 1024 * 1024;
+const ADJUNTO_MIMES = ["application/pdf", "image/jpeg", "image/png"];
+
+/**
+ * Celda de adjunto (spec-005 R5): subir/reemplazar (PUT octet-stream) y ver
+ * (GET → blob → nueva pestaña). El servidor re-valida tipo y tamaño.
+ */
+export function CeldaAdjunto({ documento }: { documento: Documento }) {
+  const api = useApi();
+  const invalidar = usarInvalidacionDocumentos();
+  const inputRef = useRef<HTMLInputElement>(null);
+  const [error, setError] = useState<string | null>(null);
+
+  const subir = useMutation({
+    mutationFn: async (archivo: File) => {
+      if (!ADJUNTO_MIMES.includes(archivo.type)) {
+        throw new Error("Solo se aceptan PDF, JPG o PNG.");
+      }
+      if (archivo.size > ADJUNTO_MAX_BYTES) {
+        throw new Error("El archivo supera el máximo de 5 MB.");
+      }
+      const r = await api.PUT("/documentos/{documentoId}/adjunto", {
+        params: { path: { documentoId: documento.id } },
+        body: archivo as unknown as string,
+        bodySerializer: (b) => b as unknown as BodyInit,
+        headers: { "Content-Type": archivo.type },
+      });
+      return desenvolver(r);
+    },
+    onSuccess: () => {
+      setError(null);
+      invalidar();
+    },
+    onError: (e) => setError(e instanceof Error ? e.message : "No se pudo subir."),
+  });
+
+  const ver = useMutation({
+    mutationFn: async () => {
+      const r = await api.GET("/documentos/{documentoId}/adjunto", {
+        params: { path: { documentoId: documento.id } },
+        parseAs: "blob",
+      });
+      const blob = desenvolver(r) as Blob;
+      const url = URL.createObjectURL(blob);
+      window.open(url, "_blank", "noopener");
+      setTimeout(() => URL.revokeObjectURL(url), 60_000);
+    },
+    onError: (e) => setError(e instanceof Error ? e.message : "No se pudo abrir."),
+  });
+
+  return (
+    <div className="flex flex-col items-end gap-1">
+      <div className="flex justify-end gap-2">
+        {documento.tieneAdjunto ? (
+          <button
+            onClick={() => ver.mutate()}
+            disabled={ver.isPending}
+            className="text-sm font-medium text-marca-700 hover:underline disabled:opacity-50"
+          >
+            {ver.isPending ? "Abriendo…" : "Ver"}
+          </button>
+        ) : null}
+        <button
+          onClick={() => inputRef.current?.click()}
+          disabled={subir.isPending}
+          className="text-sm font-medium text-marca-700 hover:underline disabled:opacity-50"
+        >
+          {subir.isPending ? "Subiendo…" : documento.tieneAdjunto ? "Reemplazar" : "Subir"}
+        </button>
+      </div>
+      {error ? <p className="text-xs text-red-600">{error}</p> : null}
+      <input
+        ref={inputRef}
+        type="file"
+        accept={ADJUNTO_MIMES.join(",")}
+        className="hidden"
+        aria-label={`Adjunto de ${documento.tipo}`}
+        onChange={(e) => {
+          const archivo = e.target.files?.[0];
+          e.target.value = "";
+          if (archivo) subir.mutate(archivo);
+        }}
+      />
+    </div>
   );
 }
 

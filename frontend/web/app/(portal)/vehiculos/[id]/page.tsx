@@ -3,7 +3,7 @@
 import { useParams } from "next/navigation";
 import { useState } from "react";
 import { useCumplimientoSujeto } from "@/features/cumplimiento";
-import { FormularioDocumento, FormularioRenovacion, useDocumentos } from "@/features/documentos";
+import { CeldaAdjunto, FormularioDocumento, FormularioRenovacion, useDocumentos } from "@/features/documentos";
 import { FormularioOdometro, useVehiculo } from "@/features/vehiculos";
 import { problemaDe } from "@/lib/api";
 import { diasRestantesTexto, etiquetaClaseVehiculo, fecha } from "@/lib/format";
@@ -83,7 +83,7 @@ export default function PaginaVehiculo() {
           />
         ) : null}
         {documentos.isSuccess && docs.length > 0 ? (
-          <Tabla encabezados={["Tipo", "Número", "Vencimiento", "Situación", "Estado", ""]}>
+          <Tabla encabezados={["Tipo", "Número", "Vencimiento", "Situación", "Estado", "Adjunto", ""]}>
             {docs.map((d) => (
               <tr key={d.id} className="hover:bg-slate-50">
                 <td className="px-4 py-3 font-medium">{d.tipo}</td>
@@ -94,6 +94,9 @@ export default function PaginaVehiculo() {
                 </td>
                 <td className="px-4 py-3">
                   <SemaforoBadge estado={d.estado} />
+                </td>
+                <td className="px-4 py-3">
+                  <CeldaAdjunto documento={d} />
                 </td>
                 <td className="px-4 py-3 text-right">
                   <BotonSecundario onClick={() => setRenovando(d)}>Renovar</BotonSecundario>

@@ -108,3 +108,27 @@ Característica: Registrar un Documento con Vencimiento y adjunto
     Cuando el Usuario de "Empresa B" lista los Documentos de su Empresa
     Entonces no obtiene ningún Documento ni adjunto de "Empresa A"
 ```
+
+## Nota de implementación — adjuntos (2026-07-06)
+
+El gap de adjuntos (R5/R11) quedó **implementado end-to-end**:
+
+- **Contrato**: `PUT /documentos/{id}/adjunto` (octet-stream, 204; 413 >5MB; 422 tipo
+  no permitido) ya existía; se agregó **`GET /documentos/{id}/adjunto`** (200 con el
+  Content-Type original; 404 sin documento o sin adjunto).
+- **Aplicación**: puerto `AlmacenAdjuntos` (guardar/obtener bajo prefijo del tenant) +
+  casos `SubirAdjunto`/`DescargarAdjunto` (`application/adjuntos.use-cases.ts`).
+  Tipos permitidos: PDF/JPEG/PNG. La ref incluye hash del contenido (append-only):
+  el histórico de renovaciones conserva su adjunto; la nueva vigencia arranca sin él.
+- **Dominio**: `Documento.adjuntarSoporte(ref)` sobre la vigencia actual.
+- **Infraestructura**: in-memory (dev/tests, como el resto del wiring) y
+  `FsAlmacenAdjuntos` (`infrastructure/`, `FLEETSPECIAL_ADJUNTOS_DIR`, metadatos
+  mime/tamaño/sha256 junto al binario, refs saneadas contra path traversal).
+  S3/MinIO implementará el mismo puerto cuando toque.
+- **Decisión R5**: los metadatos (hash/tamaño) viven en el ALMACÉN, no en la base —
+  la base solo guarda `adjunto_ref` (columna ya existente). Ratificar si se quiere
+  duplicarlos en la base para consulta.
+- **Portal**: subir/reemplazar/ver en Documentos y en el detalle de vehículo/conductor.
+- **Verificación**: adjuntos.spec 6 ✓ (casos de uso + FS + aislamiento R11) y
+  adjuntos.e2e 8 ✓ por HTTP real (round-trip de bytes, 413, 422, 404, aislamiento
+  de tenant, renovación).

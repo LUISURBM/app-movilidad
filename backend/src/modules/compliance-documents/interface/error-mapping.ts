@@ -13,6 +13,9 @@ const CODE_TO_STATUS: Record<string, number> = {
   // 404 Not Found
   documento_no_encontrado: 404,
   tipo_no_encontrado: 404,
+  adjunto_no_encontrado: 404,
+  // 413 Payload Too Large (spec-005 adjuntos)
+  adjunto_demasiado_grande: 413,
   // 422 Unprocessable Entity (validaciones de negocio)
   vencimiento_anterior_a_emision: 422,
   tipo_no_aplica_al_sujeto: 422,
@@ -20,6 +23,7 @@ const CODE_TO_STATUS: Record<string, number> = {
   tipo_documento_inactivo: 422,
   fecha_invalida: 422,
   sujeto_id_requerido: 422,
+  adjunto_tipo_no_permitido: 422,
 };
 
 export function statusForDomainError(err: DomainError): number {
