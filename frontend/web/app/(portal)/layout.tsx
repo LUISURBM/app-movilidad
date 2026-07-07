@@ -2,8 +2,9 @@
 
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
-import { useEffect, type ReactNode } from "react";
+import { useEffect, useState, type ReactNode } from "react";
 import { useSesion } from "@/lib/api";
+import { ModalCambiarPassword } from "@/features/usuarios";
 
 /**
  * Área autenticada del portal: guardia de sesión + navegación.
@@ -26,6 +27,7 @@ export default function PortalLayout({ children }: { children: ReactNode }) {
   const { sesion, cerrarSesion } = useSesion();
   const router = useRouter();
   const pathname = usePathname();
+  const [cambiandoPassword, setCambiandoPassword] = useState(false);
 
   useEffect(() => {
     if (sesion === null) router.replace("/login");
@@ -68,6 +70,12 @@ export default function PortalLayout({ children }: { children: ReactNode }) {
               {sesion.razonSocial}
             </span>
             <button
+              onClick={() => setCambiandoPassword(true)}
+              className="text-xs font-medium text-slate-500 transition hover:text-slate-800"
+            >
+              Contraseña
+            </button>
+            <button
               onClick={() => {
                 cerrarSesion();
                 router.replace("/login");
@@ -80,6 +88,10 @@ export default function PortalLayout({ children }: { children: ReactNode }) {
         </div>
       </header>
       <main className="mx-auto max-w-6xl px-4 py-8">{children}</main>
+      <ModalCambiarPassword
+        abierto={cambiandoPassword}
+        onCerrar={() => setCambiandoPassword(false)}
+      />
     </div>
   );
 }

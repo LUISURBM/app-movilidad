@@ -9,7 +9,7 @@ vi.mock("next/navigation", () => ({
 }));
 
 import PortalLayout from "@/app/(portal)/layout";
-import { SesionProvider } from "@/lib/api";
+import { Providers } from "@/lib/api";
 
 describe("guardia de sesión del portal", () => {
   beforeEach(() => {
@@ -19,11 +19,11 @@ describe("guardia de sesión del portal", () => {
 
   it("sin sesión: no muestra contenido protegido y redirige a /login", async () => {
     const { container } = render(
-      <SesionProvider>
+      <Providers>
         <PortalLayout>
           <p>contenido protegido</p>
         </PortalLayout>
-      </SesionProvider>,
+      </Providers>,
     );
 
     await waitFor(() => expect(replaceMock).toHaveBeenCalledWith("/login"));
@@ -42,11 +42,11 @@ describe("guardia de sesión del portal", () => {
     );
 
     const { container } = render(
-      <SesionProvider>
+      <Providers>
         <PortalLayout>
           <p>contenido protegido</p>
         </PortalLayout>
-      </SesionProvider>,
+      </Providers>,
     );
 
     await waitFor(() => expect(container.textContent).toContain("contenido protegido"));

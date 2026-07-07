@@ -17,6 +17,7 @@ import {
   ActualizarUsuarioRequestDto,
   InvitarUsuarioRequestDto,
   UsuarioDto,
+  UsuarioInvitadoResponseDto,
   UsuariosPaginaDto,
 } from "./dtos";
 import { problemFromDomainError } from "./error-mapping";
@@ -32,7 +33,9 @@ export class UsuariosController {
 
   @Post()
   @HttpCode(201)
-  async invitarUsuario(@Body() body: InvitarUsuarioRequestDto): Promise<UsuarioDto> {
+  async invitarUsuario(
+    @Body() body: InvitarUsuarioRequestDto,
+  ): Promise<UsuarioInvitadoResponseDto> {
     const r = await this.invitar.execute({
       tenant: this.ctx.tenantId,
       solicitanteRoles: this.ctx.roles,
@@ -45,7 +48,9 @@ export class UsuariosController {
       throw new HttpException(problem, problem.status);
     }
     const u = await this.usuarios.findById(this.ctx.tenantId, r.value.usuarioId);
-    return usuarioToDto(u!);
+    // spec-015: el código de invitación viaja SOLO en esta respuesta (el server
+    // guarda su hash). El Administrador lo entrega a la persona invitada.
+    return { ...usuarioToDto(u!), ...(r.value.invitacion ? { invitacion: r.value.invitacion } : {}) };
   }
 
   @Get()

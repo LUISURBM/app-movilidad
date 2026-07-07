@@ -27,7 +27,12 @@ export class TenantsController {
   async registrarTenant(@Body() body: RegistrarTenantRequestDto): Promise<TenantCreadoDto> {
     const r = await this.registrar.execute({
       empresa: { razonSocial: body.empresa?.razonSocial, nit: body.empresa?.nit },
-      administrador: { nombre: body.administrador?.nombre, correo: body.administrador?.correo },
+      administrador: {
+        nombre: body.administrador?.nombre,
+        correo: body.administrador?.correo,
+        // spec-015: contraseña del primer admin (requerida por el contrato).
+        password: body.administrador?.password,
+      },
       aceptaTratamientoDatos: body.aceptaTratamientoDatos,
     });
     if (!r.ok) {

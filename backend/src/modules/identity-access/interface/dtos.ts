@@ -18,7 +18,8 @@ export type EstadoUsuarioDto = "invitado" | "activo" | "suspendido";
 // ---- spec-001 ----
 export interface RegistrarTenantRequestDto {
   empresa: { razonSocial: string; nit?: string };
-  administrador: { nombre: string; correo: string };
+  /** `password` requerido por el contrato desde spec-015. */
+  administrador: { nombre: string; correo: string; password?: string };
   aceptaTratamientoDatos: boolean;
 }
 
@@ -60,4 +61,10 @@ export interface UsuariosPaginaDto {
   page: number;
   pageSize: number;
   total: number;
+}
+
+// ---- spec-015 ----
+/** POST /usuarios: el código de invitación SOLO viaja en esta respuesta. */
+export interface UsuarioInvitadoResponseDto extends UsuarioDto {
+  invitacion?: string;
 }

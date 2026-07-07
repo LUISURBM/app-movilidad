@@ -112,6 +112,38 @@ export function useApi(): FleetSpecialClient {
 }
 
 /**
+ * Login real (spec-015): correo + contraseña → sesión con el JWT emitido.
+ * Lanza ErrorApi (con el Problem) para que la UI distinga p. ej.
+ * `multiples_empresas` (pedir NIT) de `credenciales_invalidas`.
+ */
+export async function iniciarSesionConCredenciales(
+  baseUrl: string,
+  cuerpo: { correo: string; password: string; empresaNit?: string },
+): Promise<Sesion> {
+  const api = createFleetSpecialClient({ baseUrl });
+  let r;
+  try {
+    r = await api.POST("/auth/login", { body: cuerpo });
+  } catch {
+    throw new Error(
+      "No se pudo contactar la API. Verifique la URL y que el backend esté encendido.",
+    );
+  }
+  if (r.error !== undefined || !r.data) {
+    throw new ErrorApi(
+      (r.error ?? null) as schemas["Problem"] | null,
+      r.response?.status,
+    );
+  }
+  return {
+    baseUrl,
+    token: r.data.token,
+    razonSocial: r.data.tenant.razonSocial,
+    plan: "",
+  };
+}
+
+/**
  * Valida un token contra la API consultando el tenant actual.
  * Devuelve la sesión lista para guardar, o lanza con mensaje legible.
  */

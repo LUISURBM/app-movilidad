@@ -59,6 +59,16 @@ export function devAuthMiddleware(req: RequestLike, res: ResponseLike, next: () 
     return;
   }
 
+  // spec-015: login y aceptación de invitación son PÚBLICOS (security: [] en el
+  // contrato) — ocurren antes de tener sesión. /auth/password sí exige auth.
+  if (
+    (req.method ?? "").toUpperCase() === "POST" &&
+    (ruta.endsWith("/auth/login") || ruta.endsWith("/auth/aceptar-invitacion"))
+  ) {
+    next();
+    return;
+  }
+
   const header = (name: string): string | undefined => {
     const v = req.headers[name];
     return Array.isArray(v) ? v[0] : v;

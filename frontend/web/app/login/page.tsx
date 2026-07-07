@@ -4,6 +4,8 @@ import { useRouter } from "next/navigation";
 import { useState, type FormEvent } from "react";
 import {
   BASE_URL_POR_DEFECTO,
+  ErrorApi,
+  iniciarSesionConCredenciales,
   useSesion,
   validarCredenciales,
 } from "@/lib/api";
@@ -16,14 +18,18 @@ import {
 } from "@/shared/ui";
 
 /**
- * Ingreso v0: URL de la API + token de acceso (JWT).
- * En dev el token se genera con `backend/tool/token-dev.ts` (rol Operador/Admin).
- * Cuando el contrato incorpore login con credenciales, esta pantalla lo adopta.
+ * Ingreso (spec-015): correo y contraseña contra POST /auth/login.
+ * El modo "token" queda como avanzado (soporte/dev: token de token-dev.ts).
  */
 export default function PaginaLogin() {
   const router = useRouter();
   const { iniciarSesion } = useSesion();
+  const [modo, setModo] = useState<"credenciales" | "token">("credenciales");
   const [baseUrl, setBaseUrl] = useState(BASE_URL_POR_DEFECTO);
+  const [correo, setCorreo] = useState("");
+  const [password, setPassword] = useState("");
+  const [empresaNit, setEmpresaNit] = useState("");
+  const [pedirNit, setPedirNit] = useState(false);
   const [token, setToken] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [validando, setValidando] = useState(false);
@@ -32,11 +38,22 @@ export default function PaginaLogin() {
     e.preventDefault();
     setError(null);
     setValidando(true);
+    const url = baseUrl.trim().replace(/\/$/, "");
     try {
-      const sesion = await validarCredenciales(baseUrl.trim().replace(/\/$/, ""), token.trim());
+      const sesion =
+        modo === "credenciales"
+          ? await iniciarSesionConCredenciales(url, {
+              correo: correo.trim(),
+              password,
+              ...(pedirNit && empresaNit.trim() ? { empresaNit: empresaNit.trim() } : {}),
+            })
+          : await validarCredenciales(url, token.trim());
       iniciarSesion(sesion);
       router.replace("/");
     } catch (err) {
+      if (err instanceof ErrorApi && err.problema?.type === "multiples_empresas") {
+        setPedirNit(true);
+      }
       setError(err instanceof Error ? err.message : "No se pudo iniciar sesión.");
     } finally {
       setValidando(false);
@@ -64,25 +81,69 @@ export default function PaginaLogin() {
                 required
               />
             </Campo>
-            <Campo etiqueta="Token de acceso" requerido>
-              <Entrada
-                type="password"
-                value={token}
-                onChange={(e) => setToken(e.target.value)}
-                placeholder="Pegue aquí su token (JWT)"
-                required
-                autoComplete="off"
-              />
-            </Campo>
+
+            {modo === "credenciales" ? (
+              <>
+                <Campo etiqueta="Correo" requerido>
+                  <Entrada
+                    type="email"
+                    value={correo}
+                    onChange={(e) => setCorreo(e.target.value)}
+                    autoComplete="username"
+                    required
+                  />
+                </Campo>
+                <Campo etiqueta="Contraseña" requerido>
+                  <Entrada
+                    type="password"
+                    value={password}
+                    onChange={(e) => setPassword(e.target.value)}
+                    autoComplete="current-password"
+                    required
+                  />
+                </Campo>
+                {pedirNit ? (
+                  <Campo etiqueta="NIT de la Empresa" requerido>
+                    <Entrada
+                      value={empresaNit}
+                      onChange={(e) => setEmpresaNit(e.target.value)}
+                      placeholder="900123456"
+                      required
+                    />
+                  </Campo>
+                ) : null}
+              </>
+            ) : (
+              <Campo etiqueta="Token de acceso" requerido>
+                <Entrada
+                  type="password"
+                  value={token}
+                  onChange={(e) => setToken(e.target.value)}
+                  placeholder="Pegue aquí su token (JWT)"
+                  required
+                  autoComplete="off"
+                />
+              </Campo>
+            )}
+
             <ProblemAlert problema={error} />
             <BotonPrimario type="submit" disabled={validando} className="w-full">
               {validando ? "Validando…" : "Ingresar"}
             </BotonPrimario>
           </form>
         </Tarjeta>
-        <p className="mt-4 text-center text-xs text-slate-400">
-          En desarrollo, genere el token con <code>backend/tool/token-dev.ts</code>.
-        </p>
+        <button
+          type="button"
+          onClick={() => {
+            setModo(modo === "credenciales" ? "token" : "credenciales");
+            setError(null);
+          }}
+          className="mt-4 w-full text-center text-xs text-slate-400 hover:text-slate-600"
+        >
+          {modo === "credenciales"
+            ? "¿Soporte o desarrollo? Ingresar con token"
+            : "Volver al ingreso con correo y contraseña"}
+        </button>
       </div>
     </main>
   );

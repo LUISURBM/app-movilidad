@@ -1,10 +1,12 @@
 /**
- * identity-access.module.ts — wiring NestJS del módulo BC-1 (spec-001 / spec-002).
+ * identity-access.module.ts — wiring NestJS del módulo BC-1 (spec-001 / spec-002 / spec-015).
  *
- * Cablea adaptadores EN MEMORIA (verificable sin base de datos). Para producción se
- * sustituyen por los de `infrastructure/` (SQL + RLS + outbox) sin tocar el dominio ni
- * los casos de uso. El onboarding `POST /tenants` es público (exento de auth en el
- * middleware); el resto usa el contexto de tenant del request.
+ * Cablea adaptadores EN MEMORIA para repos/eventos (verificable sin base de datos;
+ * los SQL de `infrastructure/` los sustituyen en producción). Las piezas de
+ * AUTENTICACIÓN (spec-015) usan implementaciones REALES sin dependencias:
+ * scrypt de node:crypto y JWT HS256 de platform/jwt.ts (secreto por env).
+ * `POST /tenants`, `/auth/login` y `/auth/aceptar-invitacion` son públicos
+ * (exentos en dev-auth.middleware, `security: []` en el contrato).
  */
 import { Module, Scope } from "@nestjs/common";
 import { REQUEST } from "@nestjs/core";
@@ -13,17 +15,32 @@ import { CLOCK, ID_GENERATOR } from "../../platform/tokens";
 import { RequestTenantContext, Rol, TENANT_CONTEXT } from "../../platform/tenant-context";
 
 import {
+  CREDENCIAL_REPOSITORY,
+  EMISOR_TOKENS,
+  GENERADOR_CODIGOS,
+  HASHER_PASSWORD,
   IDENTITY_EVENT_PUBLISHER,
+  INVITACION_REPOSITORY,
   TENANT_REPOSITORY,
   USUARIO_REPOSITORY,
 } from "./interface/tokens";
 import { TenantsController } from "./interface/tenants.controller";
 import { UsuariosController } from "./interface/usuarios.controller";
+import { AuthController } from "./interface/auth.controller";
 import {
   InMemoryEventPublisher,
   InMemoryTenantRepository,
   InMemoryUsuarioRepository,
 } from "./application/in-memory.adapters";
+import {
+  InMemoryCredencialRepository,
+  InMemoryInvitacionRepository,
+} from "./application/auth.in-memory";
+import {
+  EmisorTokensJwt,
+  GeneradorCodigosAleatorio,
+  ScryptHasher,
+} from "./infrastructure/auth-adapters";
 import {
   AceptarInvitacion,
   ActualizarUsuario,
@@ -32,6 +49,12 @@ import {
   InvitarUsuario,
   RegistrarTenant,
 } from "./application/use-cases";
+import {
+  AceptarInvitacionConCodigo,
+  AuthDeps,
+  CambiarPassword,
+  IniciarSesion,
+} from "./application/auth.use-cases";
 
 interface AuthedRequest {
   tenantId?: string;
@@ -39,12 +62,59 @@ interface AuthedRequest {
   roles?: Rol[];
 }
 
-const DEPS = [TENANT_REPOSITORY, USUARIO_REPOSITORY, IDENTITY_EVENT_PUBLISHER, CLOCK, ID_GENERATOR];
-const armar = (tenants: never, usuarios: never, publisher: never, clock: never, ids: never): IdentityDeps =>
-  ({ tenants, usuarios, publisher, clock, ids }) as unknown as IdentityDeps;
+const DEPS = [
+  TENANT_REPOSITORY,
+  USUARIO_REPOSITORY,
+  IDENTITY_EVENT_PUBLISHER,
+  CLOCK,
+  ID_GENERATOR,
+  CREDENCIAL_REPOSITORY,
+  INVITACION_REPOSITORY,
+  HASHER_PASSWORD,
+  GENERADOR_CODIGOS,
+];
+const armar = (
+  tenants: never,
+  usuarios: never,
+  publisher: never,
+  clock: never,
+  ids: never,
+  credenciales: never,
+  invitaciones: never,
+  hasher: never,
+  codigos: never,
+): IdentityDeps =>
+  ({
+    tenants,
+    usuarios,
+    publisher,
+    clock,
+    ids,
+    auth: { credenciales, invitaciones, hasher, codigos },
+  }) as unknown as IdentityDeps;
+
+const AUTH_DEPS = [
+  CREDENCIAL_REPOSITORY,
+  INVITACION_REPOSITORY,
+  USUARIO_REPOSITORY,
+  TENANT_REPOSITORY,
+  HASHER_PASSWORD,
+  EMISOR_TOKENS,
+  CLOCK,
+];
+const armarAuth = (
+  credenciales: never,
+  invitaciones: never,
+  usuarios: never,
+  tenants: never,
+  hasher: never,
+  emisor: never,
+  clock: never,
+): AuthDeps =>
+  ({ credenciales, invitaciones, usuarios, tenants, hasher, emisor, clock }) as unknown as AuthDeps;
 
 @Module({
-  controllers: [TenantsController, UsuariosController],
+  controllers: [TenantsController, UsuariosController, AuthController],
   providers: [
     { provide: CLOCK, useClass: SystemClock },
     { provide: ID_GENERATOR, useFactory: () => new SequentialIdGenerator("usr") },
@@ -60,11 +130,23 @@ const armar = (tenants: never, usuarios: never, publisher: never, clock: never, 
     { provide: USUARIO_REPOSITORY, useClass: InMemoryUsuarioRepository },
     { provide: IDENTITY_EVENT_PUBLISHER, useClass: InMemoryEventPublisher },
 
+    // spec-015: credenciales/invitaciones in-memory (SQL en prod, migración 0010);
+    // hasher scrypt y emisor JWT son implementaciones reales sin dependencias.
+    { provide: CREDENCIAL_REPOSITORY, useClass: InMemoryCredencialRepository },
+    { provide: INVITACION_REPOSITORY, useClass: InMemoryInvitacionRepository },
+    { provide: HASHER_PASSWORD, useClass: ScryptHasher },
+    { provide: EMISOR_TOKENS, useFactory: () => new EmisorTokensJwt() },
+    { provide: GENERADOR_CODIGOS, useClass: GeneradorCodigosAleatorio },
+
     { provide: RegistrarTenant, inject: DEPS, useFactory: (...a: Parameters<typeof armar>) => new RegistrarTenant(armar(...a)) },
     { provide: InvitarUsuario, inject: DEPS, useFactory: (...a: Parameters<typeof armar>) => new InvitarUsuario(armar(...a)) },
     { provide: AceptarInvitacion, inject: DEPS, useFactory: (...a: Parameters<typeof armar>) => new AceptarInvitacion(armar(...a)) },
     { provide: ExpirarInvitacion, inject: DEPS, useFactory: (...a: Parameters<typeof armar>) => new ExpirarInvitacion(armar(...a)) },
     { provide: ActualizarUsuario, inject: DEPS, useFactory: (...a: Parameters<typeof armar>) => new ActualizarUsuario(armar(...a)) },
+
+    { provide: IniciarSesion, inject: AUTH_DEPS, useFactory: (...a: Parameters<typeof armarAuth>) => new IniciarSesion(armarAuth(...a)) },
+    { provide: AceptarInvitacionConCodigo, inject: AUTH_DEPS, useFactory: (...a: Parameters<typeof armarAuth>) => new AceptarInvitacionConCodigo(armarAuth(...a)) },
+    { provide: CambiarPassword, inject: AUTH_DEPS, useFactory: (...a: Parameters<typeof armarAuth>) => new CambiarPassword(armarAuth(...a)) },
   ],
   exports: [RegistrarTenant, InvitarUsuario],
 })

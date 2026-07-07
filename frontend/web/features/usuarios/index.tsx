@@ -84,6 +84,8 @@ export function FormularioInvitacion({
   const [nombre, setNombre] = useState("");
   const [correo, setCorreo] = useState("");
   const [roles, setRoles] = useState<RolUsuario[]>(["Operador"]);
+  const [codigo, setCodigo] = useState<string | null>(null);
+  const [copiado, setCopiado] = useState(false);
 
   const invitar = useMutation({
     mutationFn: async () =>
@@ -92,9 +94,14 @@ export function FormularioInvitacion({
           body: { nombre: nombre.trim(), correo: correo.trim(), roles },
         }),
       ),
-    onSuccess: () => {
+    onSuccess: (usuario) => {
       queryClient.invalidateQueries({ queryKey: ["usuarios"] });
-      cerrar();
+      // spec-015: el código de invitación SOLO se ve aquí; se entrega a la persona.
+      if (usuario.invitacion) {
+        setCodigo(usuario.invitacion);
+      } else {
+        cerrar();
+      }
     },
   });
 
@@ -102,6 +109,8 @@ export function FormularioInvitacion({
     setNombre("");
     setCorreo("");
     setRoles(["Operador"]);
+    setCodigo(null);
+    setCopiado(false);
     invitar.reset();
     onCerrar();
   }
@@ -112,35 +121,149 @@ export function FormularioInvitacion({
     invitar.mutate();
   }
 
+  async function copiar() {
+    if (!codigo) return;
+    try {
+      await navigator.clipboard.writeText(codigo);
+      setCopiado(true);
+    } catch {
+      /* el usuario puede seleccionar y copiar a mano */
+    }
+  }
+
   return (
-    <Modal abierto={abierto} titulo="Invitar usuario" onCerrar={cerrar}>
-      <form onSubmit={enviar} className="space-y-4">
-        <div className="grid grid-cols-2 gap-4">
-          <Campo etiqueta="Nombre" requerido>
-            <Entrada value={nombre} onChange={(e) => setNombre(e.target.value)} required />
+    <Modal
+      abierto={abierto}
+      titulo={codigo ? "Invitación creada" : "Invitar usuario"}
+      onCerrar={cerrar}
+    >
+      {codigo ? (
+        <div className="space-y-4">
+          <p className="text-sm text-slate-600">
+            Entregue este código a <span className="font-medium">{correo}</span>. Con él (y una
+            contraseña nueva) activa su cuenta en la pantalla de ingreso. Vence en 7 días y{" "}
+            <span className="font-medium">no se volverá a mostrar</span>.
+          </p>
+          <div className="flex items-center gap-2">
+            <code className="flex-1 select-all break-all rounded-lg bg-slate-100 px-3 py-2 text-sm">
+              {codigo}
+            </code>
+            <BotonPrimario onClick={copiar}>{copiado ? "Copiado" : "Copiar"}</BotonPrimario>
+          </div>
+          <div className="flex justify-end">
+            <BotonPrimario onClick={cerrar}>Entendido</BotonPrimario>
+          </div>
+        </div>
+      ) : (
+        <form onSubmit={enviar} className="space-y-4">
+          <div className="grid grid-cols-2 gap-4">
+            <Campo etiqueta="Nombre" requerido>
+              <Entrada value={nombre} onChange={(e) => setNombre(e.target.value)} required />
+            </Campo>
+            <Campo etiqueta="Correo" requerido>
+              <Entrada
+                type="email"
+                value={correo}
+                onChange={(e) => setCorreo(e.target.value)}
+                required
+              />
+            </Campo>
+          </div>
+          <Campo etiqueta="Roles" requerido>
+            <SelectorRoles seleccionados={roles} onCambio={setRoles} />
           </Campo>
-          <Campo etiqueta="Correo" requerido>
+          {roles.length === 0 ? (
+            <p className="text-xs text-red-600">Seleccione al menos un rol.</p>
+          ) : null}
+          <ProblemAlert problema={invitar.isError ? problemaDe(invitar.error) : null} />
+          <div className="flex justify-end">
+            <BotonPrimario type="submit" disabled={invitar.isPending || roles.length === 0}>
+              {invitar.isPending ? "Invitando…" : "Invitar"}
+            </BotonPrimario>
+          </div>
+        </form>
+      )}
+    </Modal>
+  );
+}
+
+/** Cambio de contraseña propia (spec-015) — accesible desde la cabecera. */
+export function ModalCambiarPassword({
+  abierto,
+  onCerrar,
+}: {
+  abierto: boolean;
+  onCerrar: () => void;
+}) {
+  const api = useApi();
+  const [actual, setActual] = useState("");
+  const [nueva, setNueva] = useState("");
+  const [exito, setExito] = useState(false);
+
+  const cambiar = useMutation({
+    mutationFn: async () =>
+      desenvolver(
+        await api.POST("/auth/password", {
+          body: { actual, nueva },
+        }),
+      ),
+    onSuccess: () => setExito(true),
+  });
+
+  function cerrar() {
+    setActual("");
+    setNueva("");
+    setExito(false);
+    cambiar.reset();
+    onCerrar();
+  }
+
+  return (
+    <Modal abierto={abierto} titulo="Cambiar contraseña" onCerrar={cerrar}>
+      {exito ? (
+        <div className="space-y-4">
+          <p className="text-sm text-slate-600">
+            Contraseña actualizada. Su sesión actual sigue activa.
+          </p>
+          <div className="flex justify-end">
+            <BotonPrimario onClick={cerrar}>Listo</BotonPrimario>
+          </div>
+        </div>
+      ) : (
+        <form
+          onSubmit={(e) => {
+            e.preventDefault();
+            cambiar.mutate();
+          }}
+          className="space-y-4"
+        >
+          <Campo etiqueta="Contraseña actual" requerido>
             <Entrada
-              type="email"
-              value={correo}
-              onChange={(e) => setCorreo(e.target.value)}
+              type="password"
+              value={actual}
+              onChange={(e) => setActual(e.target.value)}
+              autoComplete="current-password"
               required
             />
           </Campo>
-        </div>
-        <Campo etiqueta="Roles" requerido>
-          <SelectorRoles seleccionados={roles} onCambio={setRoles} />
-        </Campo>
-        {roles.length === 0 ? (
-          <p className="text-xs text-red-600">Seleccione al menos un rol.</p>
-        ) : null}
-        <ProblemAlert problema={invitar.isError ? problemaDe(invitar.error) : null} />
-        <div className="flex justify-end">
-          <BotonPrimario type="submit" disabled={invitar.isPending || roles.length === 0}>
-            {invitar.isPending ? "Invitando…" : "Invitar"}
-          </BotonPrimario>
-        </div>
-      </form>
+          <Campo etiqueta="Contraseña nueva (mínimo 10 caracteres)" requerido>
+            <Entrada
+              type="password"
+              value={nueva}
+              onChange={(e) => setNueva(e.target.value)}
+              autoComplete="new-password"
+              minLength={10}
+              required
+            />
+          </Campo>
+          <ProblemAlert problema={cambiar.isError ? problemaDe(cambiar.error) : null} />
+          <div className="flex justify-end">
+            <BotonPrimario type="submit" disabled={cambiar.isPending}>
+              {cambiar.isPending ? "Guardando…" : "Cambiar"}
+            </BotonPrimario>
+          </div>
+        </form>
+      )}
     </Modal>
   );
 }

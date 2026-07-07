@@ -4,6 +4,66 @@
  */
 
 export interface paths {
+    "/auth/login": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Iniciar sesión con correo y contraseña
+         * @description spec-015.
+         */
+        post: operations["iniciarSesion"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/auth/aceptar-invitacion": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Aceptar una invitación con código de un solo uso y definir contraseña
+         * @description spec-015.
+         */
+        post: operations["aceptarInvitacion"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/auth/password": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Cambiar la contraseña propia
+         * @description spec-015. Exige la contraseña actual.
+         */
+        post: operations["cambiarPassword"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/tenants": {
         parameters: {
             query?: never;
@@ -693,6 +753,43 @@ export interface components {
             /** Format: uuid */
             id: string;
         };
+        LoginRequest: {
+            /** Format: email */
+            correo: string;
+            /** Format: password */
+            password: string;
+            /** @description Solo si el correo existe en varias Empresas (409 previo). */
+            empresaNit?: string;
+        };
+        /** @description Resultado del login o de aceptar una invitación (spec-015). */
+        SesionCreada: {
+            /** @description JWT Bearer para toda la API. */
+            token: string;
+            /** Format: date-time */
+            expiraEn: string;
+            usuario: components["schemas"]["Usuario"];
+            tenant: {
+                /** Format: uuid */
+                id: string;
+                razonSocial: string;
+            };
+        };
+        AceptarInvitacionRequest: {
+            /** @description Código de un solo uso entregado por el Administrador. */
+            codigo: string;
+            /** Format: password */
+            password: string;
+        };
+        CambiarPasswordRequest: {
+            /** Format: password */
+            actual: string;
+            /** Format: password */
+            nueva: string;
+        };
+        UsuarioInvitadoResponse: components["schemas"]["Usuario"] & {
+            /** @description Código de un solo uso (visible SOLO en esta respuesta). */
+            invitacion?: string;
+        };
         RegistrarTenantRequest: {
             empresa: {
                 razonSocial: string;
@@ -702,6 +799,11 @@ export interface components {
                 nombre: string;
                 /** Format: email */
                 correo: string;
+                /**
+                 * Format: password
+                 * @description Contraseña del primer administrador (spec-015).
+                 */
+                password: string;
             };
             /** @description Consentimiento Habeas Data (Ley 1581/2012). Debe ser true. */
             aceptaTratamientoDatos: boolean;
@@ -1167,6 +1269,134 @@ export interface components {
 }
 export type $defs = Record<string, never>;
 export interface operations {
+    iniciarSesion: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["LoginRequest"];
+            };
+        };
+        responses: {
+            /** @description Sesión iniciada. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SesionCreada"];
+                };
+            };
+            /** @description Credenciales inválidas. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description El usuario no está Activo. */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description El correo existe en varias Empresas. */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            422: components["responses"]["ValidationError"];
+            /** @description Autenticación no configurada. */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    aceptarInvitacion: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["AceptarInvitacionRequest"];
+            };
+        };
+        responses: {
+            /** @description Invitación aceptada; sesión iniciada. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SesionCreada"];
+                };
+            };
+            /** @description Código inválido, usado o vencido. */
+            410: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            422: components["responses"]["ValidationError"];
+            /** @description Autenticación no configurada. */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    cambiarPassword: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CambiarPasswordRequest"];
+            };
+        };
+        responses: {
+            /** @description Contraseña actualizada. */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            401: components["responses"]["Unauthorized"];
+            422: components["responses"]["ValidationError"];
+        };
+    };
     registrarTenant: {
         parameters: {
             query?: never;
@@ -1262,13 +1492,13 @@ export interface operations {
             };
         };
         responses: {
-            /** @description Usuario invitado (estado `invitado`). */
+            /** @description Usuario invitado (estado `invitado`) con código de un solo uso. */
             201: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Usuario"];
+                    "application/json": components["schemas"]["UsuarioInvitadoResponse"];
                 };
             };
             401: components["responses"]["Unauthorized"];

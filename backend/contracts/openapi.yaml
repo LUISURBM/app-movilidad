@@ -49,6 +49,8 @@ servers:
 tags:
   - name: Tenants
     description: Onboarding y gestión de la Empresa (tenant). spec-001.
+  - name: Auth
+    description: Inicio de sesión con credenciales, invitaciones y contraseña. spec-015.
   - name: Usuarios
     description: Invitación, roles y ciclo de vida de usuarios. spec-002.
   - name: Vehículos
@@ -74,6 +76,100 @@ security:
   - bearerAuth: []
 
 paths:
+  # ───────────────────────── spec-015 Autenticación ─────────────────────────
+  /auth/login:
+    post:
+      tags: [Auth]
+      summary: Iniciar sesión con correo y contraseña
+      description: |
+        spec-015. Devuelve el JWT (claims sub/tenant_id/roles) que protege toda
+        la API. Si el correo existe en varias Empresas: `409 multiples_empresas`
+        — reenvíe con `empresaNit`. Credenciales inválidas: 401 sin distinguir
+        correo o contraseña. Usuario no Activo: 403.
+      security: []
+      operationId: iniciarSesion
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/LoginRequest' }
+      responses:
+        '200':
+          description: Sesión iniciada.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/SesionCreada' }
+        '401':
+          description: Credenciales inválidas.
+          content:
+            application/problem+json:
+              schema: { $ref: '#/components/schemas/Problem' }
+        '403':
+          description: El usuario no está Activo (invitado, suspendido, removido o expirado).
+          content:
+            application/problem+json:
+              schema: { $ref: '#/components/schemas/Problem' }
+        '409':
+          description: El correo existe en varias Empresas; desambigüe con `empresaNit`.
+          content:
+            application/problem+json:
+              schema: { $ref: '#/components/schemas/Problem' }
+        '422': { $ref: '#/components/responses/ValidationError' }
+        '503':
+          description: Autenticación no configurada en el servidor (sin secreto JWT).
+          content:
+            application/problem+json:
+              schema: { $ref: '#/components/schemas/Problem' }
+
+  /auth/aceptar-invitacion:
+    post:
+      tags: [Auth]
+      summary: Aceptar una invitación con código de un solo uso y definir contraseña
+      description: |
+        spec-015 (cierra spec-002): el código lo entrega el Administrador (se
+        muestra una sola vez al invitar) y expira a los 7 días. En éxito el
+        usuario queda Activo y recibe sesión de inmediato.
+      security: []
+      operationId: aceptarInvitacion
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/AceptarInvitacionRequest' }
+      responses:
+        '200':
+          description: Invitación aceptada; sesión iniciada.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/SesionCreada' }
+        '410':
+          description: Código inválido, usado o vencido.
+          content:
+            application/problem+json:
+              schema: { $ref: '#/components/schemas/Problem' }
+        '422': { $ref: '#/components/responses/ValidationError' }
+        '503':
+          description: Autenticación no configurada en el servidor (sin secreto JWT).
+          content:
+            application/problem+json:
+              schema: { $ref: '#/components/schemas/Problem' }
+
+  /auth/password:
+    post:
+      tags: [Auth]
+      summary: Cambiar la contraseña propia
+      description: spec-015. Exige la contraseña actual.
+      operationId: cambiarPassword
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/CambiarPasswordRequest' }
+      responses:
+        '204': { description: Contraseña actualizada. }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '422': { $ref: '#/components/responses/ValidationError' }
+
   # ───────────────────────── spec-001 Tenants ─────────────────────────
   /tenants:
     post:
@@ -153,10 +249,13 @@ paths:
             schema: { $ref: '#/components/schemas/InvitarUsuarioRequest' }
       responses:
         '201':
-          description: Usuario invitado (estado `invitado`).
+          description: |
+            Usuario invitado (estado `invitado`). Incluye `invitacion`: código de
+            un solo uso para `POST /auth/aceptar-invitacion` — SE MUESTRA SOLO
+            AQUÍ (el servidor guarda únicamente su hash; expira en 7 días).
           content:
             application/json:
-              schema: { $ref: '#/components/schemas/Usuario' }
+              schema: { $ref: '#/components/schemas/UsuarioInvitadoResponse' }
         '401': { $ref: '#/components/responses/Unauthorized' }
         '403': { $ref: '#/components/responses/Forbidden' }
         '409':
@@ -1100,6 +1199,54 @@ components:
       required: [tipo, id]
 
     # ---------- Tenant / Usuario ----------
+    LoginRequest:
+      type: object
+      properties:
+        correo: { type: string, format: email }
+        password: { type: string, format: password }
+        empresaNit:
+          type: string
+          description: Solo si el correo existe en varias Empresas (409 previo).
+      required: [correo, password]
+
+    SesionCreada:
+      type: object
+      description: Resultado del login o de aceptar una invitación (spec-015).
+      properties:
+        token: { type: string, description: JWT Bearer para toda la API. }
+        expiraEn: { type: string, format: date-time }
+        usuario: { $ref: '#/components/schemas/Usuario' }
+        tenant:
+          type: object
+          properties:
+            id: { type: string, format: uuid }
+            razonSocial: { type: string }
+          required: [id, razonSocial]
+      required: [token, expiraEn, usuario, tenant]
+
+    AceptarInvitacionRequest:
+      type: object
+      properties:
+        codigo: { type: string, description: Código de un solo uso entregado por el Administrador. }
+        password: { type: string, format: password, minLength: 10 }
+      required: [codigo, password]
+
+    CambiarPasswordRequest:
+      type: object
+      properties:
+        actual: { type: string, format: password }
+        nueva: { type: string, format: password, minLength: 10 }
+      required: [actual, nueva]
+
+    UsuarioInvitadoResponse:
+      allOf:
+        - $ref: '#/components/schemas/Usuario'
+        - type: object
+          properties:
+            invitacion:
+              type: string
+              description: Código de un solo uso (visible SOLO en esta respuesta).
+
     RegistrarTenantRequest:
       type: object
       properties:
@@ -1114,7 +1261,12 @@ components:
           properties:
             nombre: { type: string }
             correo: { type: string, format: email }
-          required: [nombre, correo]
+            password:
+              type: string
+              format: password
+              minLength: 10
+              description: Contraseña del primer administrador (spec-015).
+          required: [nombre, correo, password]
         aceptaTratamientoDatos:
           type: boolean
           description: Consentimiento Habeas Data (Ley 1581/2012). Debe ser true.

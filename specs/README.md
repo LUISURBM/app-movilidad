@@ -125,6 +125,7 @@ Cada spec nace de un caso de uso del MVP (Fase 1 §4, los marcados ⭐) y vive e
 | spec-012 | BC-7 Maintenance Management | Registrar/programar mantenimiento preventivo ⭐ | Umbral; P6, P7; `MantenimientoProgramado`, `MantenimientoVencido`, `MantenimientoRegistrado` |
 | spec-013 | BC-8 Billing & Subscriptions | Gestionar suscripción y plan (post-MVP temprano) | P9; `SuscripcionActivada` |
 | spec-014 | BC-5 Service Scheduling (offline) | Registrar novedades con foto que sincronizan ⭐ | S5; P12; `NovedadReportada` |
+| spec-015 | BC-1 Identity & Access | Login con correo/contraseña; invitación con código de un solo uso ⭐ | scrypt; JWT HS256; credencial/invitación pre-tenant |
 
 ### 4.2 Conexión con las demás fases
 
