@@ -22,6 +22,10 @@ import {
   InMemoryVehiculoRepository,
 } from "./application/in-memory.adapters";
 import { ActualizarOdometro, FleetDeps, RegistrarVehiculo } from "./application/use-cases";
+import { DataSource } from "typeorm";
+import { DATA_SOURCE, elegirAdaptador } from "../../platform/persistencia";
+import { SqlFleetEventPublisher, SqlVehiculoRepository } from "./infrastructure/sql-adapters";
+import { PublicadorSuscribibleSobre } from "./infrastructure/publicador-suscribible";
 
 interface AuthedRequest {
   tenantId?: string;
@@ -45,8 +49,25 @@ const armar = (vehiculos: never, publisher: never, ids: never): FleetDeps =>
         new RequestTenantContext(TenantId(req.tenantId ?? ""), req.usuarioId ?? "", req.roles ?? []),
     },
 
-    { provide: VEHICULO_REPOSITORY, useClass: InMemoryVehiculoRepository },
-    { provide: FLEET_EVENT_PUBLISHER, useClass: InMemoryEventPublisher },
+    // Persistencia conmutable (E0): postgres → adaptadores SQL; memoria → in-memory.
+    {
+      provide: VEHICULO_REPOSITORY,
+      inject: [DATA_SOURCE],
+      useFactory: (ds: DataSource | null) =>
+        elegirAdaptador(ds, (d) => new SqlVehiculoRepository(d), () => new InMemoryVehiculoRepository()),
+    },
+    // El publicador SIEMPRE es suscribible (costura P6 de spec-012): en postgres
+    // escribe al outbox Y notifica in-process; en memoria el in-memory ya lo es.
+    {
+      provide: FLEET_EVENT_PUBLISHER,
+      inject: [DATA_SOURCE],
+      useFactory: (ds: DataSource | null) =>
+        elegirAdaptador(
+          ds,
+          (d) => new PublicadorSuscribibleSobre(new SqlFleetEventPublisher(d)),
+          () => new InMemoryEventPublisher(),
+        ),
+    },
 
     { provide: RegistrarVehiculo, inject: DEPS, useFactory: (...a: Parameters<typeof armar>) => new RegistrarVehiculo(armar(...a)) },
     { provide: ActualizarOdometro, inject: DEPS, useFactory: (...a: Parameters<typeof armar>) => new ActualizarOdometro(armar(...a)) },

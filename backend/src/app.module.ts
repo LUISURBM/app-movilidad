@@ -47,6 +47,14 @@ import {
   TenantRegistry,
 } from "./platform/daily-job";
 import { SystemClock } from "./shared/kernel";
+import { DataSource } from "typeorm";
+import {
+  DATA_SOURCE,
+  elegirAdaptador,
+  PersistenciaModule,
+  SqlTenantRegistry,
+} from "./platform/persistencia";
+import { SqlOutboxStore } from "./platform/outbox.sql-store";
 
 export const TENANT_REGISTRY = Symbol("TENANT_REGISTRY");
 export const OUTBOX_DISPATCHER = Symbol("OUTBOX_DISPATCHER");
@@ -85,6 +93,8 @@ class PlatformWorkers implements OnApplicationBootstrap, OnApplicationShutdown {
 
 @Module({
   imports: [
+    // Persistencia conmutable (E0): expone DATA_SOURCE global (null en memoria).
+    PersistenciaModule,
     ComplianceDocumentsModule,
     ServiceSchedulingModule,
     FleetManagementModule,
@@ -95,16 +105,23 @@ class PlatformWorkers implements OnApplicationBootstrap, OnApplicationShutdown {
   ],
   controllers: [HealthController],
   providers: [
-    // Tenants activos: in-memory desde env (el onboarding spec-001 traerá la fuente real).
+    // Tenants activos: en postgres, la tabla `tenant` (spec-001) es la fuente real;
+    // en memoria, CSV desde env (dev/demo).
     {
       provide: TENANT_REGISTRY,
-      useFactory: (): TenantRegistry =>
-        new InMemoryTenantRegistry(
-          (process.env.FLEETSPECIAL_TENANTS ?? "")
-            .split(",")
-            .map((t) => t.trim())
-            .filter(Boolean)
-            .map((t) => TenantId(t)),
+      inject: [DATA_SOURCE],
+      useFactory: (ds: DataSource | null): TenantRegistry =>
+        elegirAdaptador(
+          ds,
+          (d) => new SqlTenantRegistry(d),
+          () =>
+            new InMemoryTenantRegistry(
+              (process.env.FLEETSPECIAL_TENANTS ?? "")
+                .split(",")
+                .map((t) => t.trim())
+                .filter(Boolean)
+                .map((t) => TenantId(t)),
+            ),
         ),
     },
     // Dispatcher del outbox → sink de NOTIFICACIONES (spec-006 R4/R6, spec-009 P3).
@@ -112,14 +129,21 @@ class PlatformWorkers implements OnApplicationBootstrap, OnApplicationShutdown {
     // y canal consola. Producción: SqlOutboxStore + EmailCanal/SmsCanal, misma lógica.
     {
       provide: OUTBOX_DISPATCHER,
-      useFactory: () => {
+      inject: [DATA_SOURCE],
+      useFactory: (ds: DataSource | null) => {
         const directorio = new InMemoryDirectorioContactos();
         for (const par of (process.env.FLEETSPECIAL_CONTACTOS ?? "").split(",")) {
           const [tenant, email] = par.split(":").map((s) => s.trim());
           if (tenant && email) directorio.agregar(tenant, { email });
         }
         const sink = new NotificacionesSink(directorio, new ConsoleCanalNotificacion());
-        return new OutboxDispatcher(new InMemoryOutboxStore(), sink, new SystemClock());
+        // Postgres: la tabla `outbox` real (SKIP LOCKED); memoria: store local.
+        const store = elegirAdaptador(
+          ds,
+          (d) => new SqlOutboxStore(d),
+          () => new InMemoryOutboxStore(),
+        );
+        return new OutboxDispatcher(store, sink, new SystemClock());
       },
     },
     // Job diario del reloj de dominio (spec-006 R8): EvaluarVencimientos por tenant.

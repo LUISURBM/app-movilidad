@@ -55,6 +55,17 @@ import {
   CambiarPassword,
   IniciarSesion,
 } from "./application/auth.use-cases";
+import { DataSource } from "typeorm";
+import { DATA_SOURCE, elegirAdaptador } from "../../platform/persistencia";
+import {
+  SqlIdentityEventPublisher,
+  SqlTenantRepository,
+  SqlUsuarioRepository,
+} from "./infrastructure/sql-adapters";
+import {
+  SqlCredencialRepository,
+  SqlInvitacionRepository,
+} from "./infrastructure/auth.sql-adapters";
 
 interface AuthedRequest {
   tenantId?: string;
@@ -126,14 +137,39 @@ const armarAuth = (
         new RequestTenantContext(TenantId(req.tenantId ?? ""), req.usuarioId ?? "", req.roles ?? []),
     },
 
-    { provide: TENANT_REPOSITORY, useClass: InMemoryTenantRepository },
-    { provide: USUARIO_REPOSITORY, useClass: InMemoryUsuarioRepository },
-    { provide: IDENTITY_EVENT_PUBLISHER, useClass: InMemoryEventPublisher },
+    // Persistencia conmutable (E0): postgres → SQL (migraciones 0007/0010); memoria → in-memory.
+    {
+      provide: TENANT_REPOSITORY,
+      inject: [DATA_SOURCE],
+      useFactory: (ds: DataSource | null) =>
+        elegirAdaptador(ds, (d) => new SqlTenantRepository(d), () => new InMemoryTenantRepository()),
+    },
+    {
+      provide: USUARIO_REPOSITORY,
+      inject: [DATA_SOURCE],
+      useFactory: (ds: DataSource | null) =>
+        elegirAdaptador(ds, (d) => new SqlUsuarioRepository(d), () => new InMemoryUsuarioRepository()),
+    },
+    {
+      provide: IDENTITY_EVENT_PUBLISHER,
+      inject: [DATA_SOURCE],
+      useFactory: (ds: DataSource | null) =>
+        elegirAdaptador(ds, (d) => new SqlIdentityEventPublisher(d), () => new InMemoryEventPublisher()),
+    },
 
-    // spec-015: credenciales/invitaciones in-memory (SQL en prod, migración 0010);
-    // hasher scrypt y emisor JWT son implementaciones reales sin dependencias.
-    { provide: CREDENCIAL_REPOSITORY, useClass: InMemoryCredencialRepository },
-    { provide: INVITACION_REPOSITORY, useClass: InMemoryInvitacionRepository },
+    // spec-015: hasher scrypt y emisor JWT son implementaciones reales sin dependencias.
+    {
+      provide: CREDENCIAL_REPOSITORY,
+      inject: [DATA_SOURCE],
+      useFactory: (ds: DataSource | null) =>
+        elegirAdaptador(ds, (d) => new SqlCredencialRepository(d), () => new InMemoryCredencialRepository()),
+    },
+    {
+      provide: INVITACION_REPOSITORY,
+      inject: [DATA_SOURCE],
+      useFactory: (ds: DataSource | null) =>
+        elegirAdaptador(ds, (d) => new SqlInvitacionRepository(d), () => new InMemoryInvitacionRepository()),
+    },
     { provide: HASHER_PASSWORD, useClass: ScryptHasher },
     { provide: EMISOR_TOKENS, useFactory: () => new EmisorTokensJwt() },
     { provide: GENERADOR_CODIGOS, useClass: GeneradorCodigosAleatorio },

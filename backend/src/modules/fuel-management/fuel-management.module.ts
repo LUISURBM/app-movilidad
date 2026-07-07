@@ -27,6 +27,9 @@ import {
 } from "./application/in-memory.adapters";
 import { FuelDeps, RegistrarTanqueo } from "./application/use-cases";
 import { FleetOdometroAcl } from "./infrastructure/fleet-odometro.acl";
+import { DataSource } from "typeorm";
+import { DATA_SOURCE, elegirAdaptador } from "../../platform/persistencia";
+import { SqlFuelEventPublisher, SqlTanqueoRepository } from "./infrastructure/sql-adapters";
 
 // Colaboración entre contextos: SOLO la API pública de Fleet (ActualizarOdometro + repo).
 import { FleetManagementModule } from "../fleet-management/fleet-management.module";
@@ -52,8 +55,19 @@ interface AuthedRequest {
         new RequestTenantContext(TenantId(req.tenantId ?? ""), req.usuarioId ?? "", req.roles ?? []),
     },
 
-    { provide: TANQUEO_REPOSITORY, useClass: InMemoryTanqueoRepository },
-    { provide: FUEL_EVENT_PUBLISHER, useClass: InMemoryEventPublisher },
+    // Persistencia conmutable (E0): postgres → SQL; memoria → in-memory.
+    {
+      provide: TANQUEO_REPOSITORY,
+      inject: [DATA_SOURCE],
+      useFactory: (ds: DataSource | null) =>
+        elegirAdaptador(ds, (d) => new SqlTanqueoRepository(d), () => new InMemoryTanqueoRepository()),
+    },
+    {
+      provide: FUEL_EVENT_PUBLISHER,
+      inject: [DATA_SOURCE],
+      useFactory: (ds: DataSource | null) =>
+        elegirAdaptador(ds, (d) => new SqlFuelEventPublisher(d), () => new InMemoryEventPublisher()),
+    },
 
     // ACL real hacia Fleet (spec-011 R8 + spec-003 R6): el Odómetro autoritativo vive en BC-2.
     {

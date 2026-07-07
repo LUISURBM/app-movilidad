@@ -28,6 +28,9 @@ import { DriverDeps, RegistrarConductor } from "./application/use-cases";
 import { LicenciaAcl } from "./infrastructure/licencia.acl";
 import { RegistrarDocumento } from "../compliance-documents/application/use-cases";
 import { ComplianceDocumentsModule } from "../compliance-documents/compliance-documents.module";
+import { DataSource } from "typeorm";
+import { DATA_SOURCE, elegirAdaptador } from "../../platform/persistencia";
+import { SqlConductorRepository, SqlDriverEventPublisher } from "./infrastructure/sql-adapters";
 
 interface AuthedRequest {
   tenantId?: string;
@@ -53,8 +56,19 @@ const armar = (conductores: never, publisher: never, licencia: never, clock: nev
         new RequestTenantContext(TenantId(req.tenantId ?? ""), req.usuarioId ?? "", req.roles ?? []),
     },
 
-    { provide: CONDUCTOR_REPOSITORY, useClass: InMemoryConductorRepository },
-    { provide: DRIVER_EVENT_PUBLISHER, useClass: InMemoryEventPublisher },
+    // Persistencia conmutable (E0): postgres → SQL; memoria → in-memory.
+    {
+      provide: CONDUCTOR_REPOSITORY,
+      inject: [DATA_SOURCE],
+      useFactory: (ds: DataSource | null) =>
+        elegirAdaptador(ds, (d) => new SqlConductorRepository(d), () => new InMemoryConductorRepository()),
+    },
+    {
+      provide: DRIVER_EVENT_PUBLISHER,
+      inject: [DATA_SOURCE],
+      useFactory: (ds: DataSource | null) =>
+        elegirAdaptador(ds, (d) => new SqlDriverEventPublisher(d), () => new InMemoryEventPublisher()),
+    },
 
     // ACL real hacia Compliance (spec-004 R5): materializa la Licencia como Documento.
     {

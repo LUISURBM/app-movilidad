@@ -1,0 +1,89 @@
+# FleetSpecial E0 — un VPS, cuatro contenedores (ADR-0006: portable, sin atadura de nube).
+#
+#   cp .env.example .env   (y llenar secretos)
+#   docker compose up -d --build
+#
+# Caddy publica 80/443 con TLS automático (Let's Encrypt):
+#   https://$DOMINIO      → portal web
+#   https://api.$DOMINIO  → API (el portal pide la URL de la API en el login)
+name: fleetspecial
+
+services:
+  db:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: fleetspecial
+      POSTGRES_USER: fleetspecial
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?defina POSTGRES_PASSWORD en .env}
+    volumes:
+      - datos_pg:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U fleetspecial -d fleetspecial"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+
+  # Migrador one-shot: aplica backend/migrations/*.sql y termina.
+  migrador:
+    build:
+      context: ../..
+      dockerfile: infrastructure/docker/api.Dockerfile
+    command: ["npx", "tsx", "tool/migrar.ts"]
+    environment:
+      DATABASE_URL: postgres://fleetspecial:${POSTGRES_PASSWORD}@db:5432/fleetspecial
+    depends_on:
+      db:
+        condition: service_healthy
+    restart: "no"
+
+  api:
+    build:
+      context: ../..
+      dockerfile: infrastructure/docker/api.Dockerfile
+    restart: unless-stopped
+    environment:
+      FLEETSPECIAL_PERSISTENCIA: postgres
+      DATABASE_URL: postgres://fleetspecial:${POSTGRES_PASSWORD}@db:5432/fleetspecial
+      FLEETSPECIAL_JWT_SECRET: ${FLEETSPECIAL_JWT_SECRET:?defina FLEETSPECIAL_JWT_SECRET en .env}
+      FLEETSPECIAL_ADJUNTOS_DIR: /datos/adjuntos
+      FLEETSPECIAL_CONTACTOS: ${FLEETSPECIAL_CONTACTOS:-}
+      OUTBOX_POLL_MS: ${OUTBOX_POLL_MS:-5000}
+    volumes:
+      - datos_adjuntos:/datos/adjuntos
+    depends_on:
+      db:
+        condition: service_healthy
+      migrador:
+        condition: service_completed_successfully
+
+  web:
+    build:
+      context: ../..
+      dockerfile: infrastructure/docker/web.Dockerfile
+    restart: unless-stopped
+    depends_on:
+      - api
+
+  caddy:
+    image: caddy:2-alpine
+    restart: unless-stopped
+    ports:
+      - "80:80"
+      - "443:443"
+    environment:
+      DOMINIO: ${DOMINIO:?defina DOMINIO en .env (p. ej. fleetspecial.midominio.co)}
+      CORREO_TLS: ${CORREO_TLS:?defina CORREO_TLS en .env (avisos de Let's Encrypt)}
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - datos_caddy:/data
+      - config_caddy:/config
+    depends_on:
+      - api
+      - web
+
+volumes:
+  datos_pg:
+  datos_adjuntos:
+  datos_caddy:
+  config_caddy:

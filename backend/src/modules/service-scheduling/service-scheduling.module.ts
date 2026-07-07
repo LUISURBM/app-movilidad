@@ -55,6 +55,12 @@ import { ComplianceDocumentsModule } from "../compliance-documents/compliance-do
 import { TanqueoAcl } from "./infrastructure/tanqueo.acl";
 import { RegistrarTanqueo } from "../fuel-management/application/use-cases";
 import { FuelManagementModule } from "../fuel-management/fuel-management.module";
+import { DataSource } from "typeorm";
+import { DATA_SOURCE, elegirAdaptador } from "../../platform/persistencia";
+import { TypeOrmServicioRepository } from "./infrastructure/typeorm.repositories";
+import { OutboxEventPublisher } from "./infrastructure/outbox.publisher";
+import { SqlBitacoraSync, SqlIdempotencyStore } from "./infrastructure/sync.sql-adapters";
+import { SqlNovedadRepository } from "./infrastructure/novedad.sql-adapters";
 
 /** Forma mínima esperada del request tras el guard de autenticación. */
 interface AuthedRequest {
@@ -101,12 +107,37 @@ const armar = (servicios: never, cumplimiento: never, publisher: never, idempote
         ),
     },
 
-    // Puertos -> adaptadores (EN MEMORIA; sustituir por infrastructure en prod).
-    { provide: SERVICIO_REPOSITORY, useClass: InMemoryServicioRepository },
-    { provide: SCHEDULING_EVENT_PUBLISHER, useClass: InMemoryEventPublisher },
-    { provide: IDEMPOTENCY_STORE, useClass: InMemoryIdempotencyStore },
-    { provide: BITACORA_SYNC, useClass: InMemoryBitacoraSync },
-    { provide: NOVEDAD_REPOSITORY, useClass: InMemoryNovedadRepository },
+    // Persistencia conmutable (E0): postgres → TypeORM/SQL; memoria → in-memory.
+    {
+      provide: SERVICIO_REPOSITORY,
+      inject: [DATA_SOURCE],
+      useFactory: (ds: DataSource | null) =>
+        elegirAdaptador(ds, (d) => new TypeOrmServicioRepository(d), () => new InMemoryServicioRepository()),
+    },
+    {
+      provide: SCHEDULING_EVENT_PUBLISHER,
+      inject: [DATA_SOURCE],
+      useFactory: (ds: DataSource | null) =>
+        elegirAdaptador(ds, (d) => new OutboxEventPublisher(d), () => new InMemoryEventPublisher()),
+    },
+    {
+      provide: IDEMPOTENCY_STORE,
+      inject: [DATA_SOURCE],
+      useFactory: (ds: DataSource | null) =>
+        elegirAdaptador(ds, (d) => new SqlIdempotencyStore(d), () => new InMemoryIdempotencyStore()),
+    },
+    {
+      provide: BITACORA_SYNC,
+      inject: [DATA_SOURCE],
+      useFactory: (ds: DataSource | null) =>
+        elegirAdaptador(ds, (d) => new SqlBitacoraSync(d), () => new InMemoryBitacoraSync()),
+    },
+    {
+      provide: NOVEDAD_REPOSITORY,
+      inject: [DATA_SOURCE],
+      useFactory: (ds: DataSource | null) =>
+        elegirAdaptador(ds, (d) => new SqlNovedadRepository(d), () => new InMemoryNovedadRepository()),
+    },
 
     // ACL real hacia Compliance (spec-009 R2). `ConsultarSemaforo` la provee el
     // módulo raíz de la app (AppModule) al importar ambos módulos; aquí se declara

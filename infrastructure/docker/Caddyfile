@@ -1,0 +1,20 @@
+# Caddy — TLS automático (Let's Encrypt) y reverse proxy de FleetSpecial (E0).
+{
+	email {$CORREO_TLS}
+}
+
+# Portal web (Next.js)
+{$DOMINIO} {
+	reverse_proxy web:3000
+}
+
+# API (NestJS). El portal pide la URL de la API al ingresar:
+#   https://api.{$DOMINIO}/v1
+api.{$DOMINIO} {
+	reverse_proxy api:3000
+
+	# Adjuntos de hasta 5 MB + margen de cabeceras.
+	request_body {
+		max_size 6MB
+	}
+}

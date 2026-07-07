@@ -39,6 +39,14 @@ import {
 } from "./application/in-memory.adapters";
 import { InMemoryAlmacenAdjuntos } from "./application/adjuntos.in-memory";
 import { DescargarAdjunto, SubirAdjunto } from "./application/adjuntos.use-cases";
+import { DataSource } from "typeorm";
+import { DATA_SOURCE, elegirAdaptador } from "../../platform/persistencia";
+import {
+  TypeOrmCatalogoTiposRepository,
+  TypeOrmDocumentoRepository,
+} from "./infrastructure/typeorm.repositories";
+import { OutboxEventPublisher } from "./infrastructure/outbox.publisher";
+import { FsAlmacenAdjuntos } from "./infrastructure/fs-almacen-adjuntos";
 import {
   ComplianceDeps,
   ConsultarDocumentosVigentes,
@@ -75,13 +83,33 @@ interface AuthedRequest {
         ),
     },
 
-    // Puertos -> adaptadores (EN MEMORIA; sustituir por infrastructure en prod).
-    { provide: DOCUMENTO_REPOSITORY, useClass: InMemoryDocumentoRepository },
-    { provide: CATALOGO_TIPOS_REPOSITORY, useClass: InMemoryCatalogoTiposRepository },
-    { provide: EVENT_PUBLISHER, useClass: InMemoryEventPublisher },
-    // Adjuntos (spec-005 R5): in-memory en dev; FsAlmacenAdjuntos (infrastructure)
-    // o S3/MinIO en producción — mismo puerto.
-    { provide: ALMACEN_ADJUNTOS, useClass: InMemoryAlmacenAdjuntos },
+    // Persistencia conmutable (E0): postgres → TypeORM/outbox/FS; memoria → in-memory.
+    {
+      provide: DOCUMENTO_REPOSITORY,
+      inject: [DATA_SOURCE],
+      useFactory: (ds: DataSource | null) =>
+        elegirAdaptador(ds, (d) => new TypeOrmDocumentoRepository(d), () => new InMemoryDocumentoRepository()),
+    },
+    {
+      provide: CATALOGO_TIPOS_REPOSITORY,
+      inject: [DATA_SOURCE],
+      useFactory: (ds: DataSource | null) =>
+        elegirAdaptador(ds, (d) => new TypeOrmCatalogoTiposRepository(d), () => new InMemoryCatalogoTiposRepository()),
+    },
+    {
+      provide: EVENT_PUBLISHER,
+      inject: [DATA_SOURCE],
+      useFactory: (ds: DataSource | null) =>
+        elegirAdaptador(ds, (d) => new OutboxEventPublisher(d), () => new InMemoryEventPublisher()),
+    },
+    // Adjuntos (spec-005 R5): FS en postgres (FLEETSPECIAL_ADJUNTOS_DIR; S3/MinIO
+    // implementará el mismo puerto), in-memory en dev.
+    {
+      provide: ALMACEN_ADJUNTOS,
+      inject: [DATA_SOURCE],
+      useFactory: (ds: DataSource | null) =>
+        elegirAdaptador(ds, () => new FsAlmacenAdjuntos(), () => new InMemoryAlmacenAdjuntos()),
+    },
 
     // Casos de uso (se arman con los puertos + plataforma).
     {

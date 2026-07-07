@@ -23,6 +23,9 @@ import { MAINTENANCE_EVENT_PUBLISHER, UMBRAL_REPOSITORY } from "./interface/toke
 import { MantenimientoController } from "./interface/mantenimiento.controller";
 import { InMemoryEventPublisher, InMemoryUmbralRepository } from "./application/in-memory.adapters";
 import { CosturaOdometroMantenimiento } from "./infrastructure/costura-odometro";
+import { DataSource } from "typeorm";
+import { DATA_SOURCE, elegirAdaptador } from "../../platform/persistencia";
+import { SqlMaintenanceEventPublisher, SqlUmbralRepository } from "./infrastructure/sql-adapters";
 import {
   DefinirUmbral,
   EvaluarUmbralPorOdometro,
@@ -48,8 +51,19 @@ const armar = (umbrales: never, publisher: never, clock: never, ids: never): Mai
   providers: [
     { provide: CLOCK, useClass: SystemClock },
     { provide: ID_GENERATOR, useFactory: () => new SequentialIdGenerator("mnt") },
-    { provide: UMBRAL_REPOSITORY, useClass: InMemoryUmbralRepository },
-    { provide: MAINTENANCE_EVENT_PUBLISHER, useClass: InMemoryEventPublisher },
+    // Persistencia conmutable (E0): postgres → SQL; memoria → in-memory.
+    {
+      provide: UMBRAL_REPOSITORY,
+      inject: [DATA_SOURCE],
+      useFactory: (ds: DataSource | null) =>
+        elegirAdaptador(ds, (d) => new SqlUmbralRepository(d), () => new InMemoryUmbralRepository()),
+    },
+    {
+      provide: MAINTENANCE_EVENT_PUBLISHER,
+      inject: [DATA_SOURCE],
+      useFactory: (ds: DataSource | null) =>
+        elegirAdaptador(ds, (d) => new SqlMaintenanceEventPublisher(d), () => new InMemoryEventPublisher()),
+    },
     {
       provide: TENANT_CONTEXT,
       scope: Scope.REQUEST,
