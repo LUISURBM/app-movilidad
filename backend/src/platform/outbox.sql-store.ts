@@ -7,6 +7,7 @@
  * respetarlo (no mezclar destinatarios entre Empresas).
  */
 import { DataSource } from "typeorm";
+import { qPlataforma } from "./tenant-sql";
 import { OutboxRow, OutboxStore } from "./outbox";
 
 interface OutboxRecord {
@@ -22,7 +23,7 @@ export class SqlOutboxStore implements OutboxStore {
   constructor(private readonly dataSource: DataSource) {}
 
   async tomarPendientes(limite: number, ahora: Date): Promise<OutboxRow[]> {
-    const rows: OutboxRecord[] = await this.dataSource.query(
+    const rows: OutboxRecord[] = await qPlataforma(this.dataSource).query(
       `SELECT id, tenant_id, tipo_evento, aggregate_id, payload, intentos
          FROM outbox
         WHERE estado = 'pendiente' AND proximo_intento <= $1
@@ -42,11 +43,11 @@ export class SqlOutboxStore implements OutboxStore {
   }
 
   async marcarPublicado(id: string): Promise<void> {
-    await this.dataSource.query(`UPDATE outbox SET estado = 'publicado' WHERE id = $1`, [id]);
+    await qPlataforma(this.dataSource).query(`UPDATE outbox SET estado = 'publicado' WHERE id = $1`, [id]);
   }
 
   async reprogramar(id: string, intentos: number, proximoIntento: Date, agotado: boolean): Promise<void> {
-    await this.dataSource.query(
+    await qPlataforma(this.dataSource).query(
       `UPDATE outbox
           SET intentos = $2, proximo_intento = $3, estado = $4
         WHERE id = $1`,

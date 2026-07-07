@@ -6,6 +6,7 @@
  * se inserta con SQL parametrizado en el contexto transaccional actual.
  */
 import { DataSource } from "typeorm";
+import { q } from "../../../platform/tenant-sql";
 import { TenantId } from "../../../shared/kernel";
 import { DomainEvent } from "../domain/events";
 import { EventPublisher } from "../application/ports";
@@ -16,7 +17,7 @@ export class OutboxEventPublisher implements EventPublisher {
   async publish(tenant: TenantId, eventos: readonly DomainEvent[]): Promise<void> {
     if (eventos.length === 0) return;
     for (const e of eventos) {
-      await this.dataSource.query(
+      await q(this.dataSource, tenant).query(
         `INSERT INTO outbox (tenant_id, tipo_evento, aggregate_id, payload, estado, intentos)
          VALUES ($1, $2, $3, $4, 'pendiente', 0)`,
         [tenant, e.tipo, e.servicioId, JSON.stringify(e)],

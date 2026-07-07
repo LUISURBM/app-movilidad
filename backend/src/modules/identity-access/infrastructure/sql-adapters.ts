@@ -4,6 +4,7 @@
  * SQL parametrizado directo. El `usuario` asume la sesión con `app.current_tenant` fijado.
  */
 import { DataSource } from "typeorm";
+import { q } from "../../../platform/tenant-sql";
 import { TenantId } from "../../../shared/kernel";
 import { Rol } from "../../../platform/tenant-context";
 import { Tenant } from "../domain/tenant.aggregate";
@@ -96,7 +97,7 @@ export class SqlUsuarioRepository implements UsuarioRepository {
 
   async save(tenant: TenantId, u: Usuario): Promise<void> {
     const s = u.snapshot();
-    await this.dataSource.query(
+    await q(this.dataSource, tenant).query(
       `INSERT INTO usuario (id, tenant_id, nombre, correo, roles, estado)
        VALUES ($1,$2,$3,$4,$5,$6)
        ON CONFLICT (id) DO UPDATE SET
@@ -107,17 +108,17 @@ export class SqlUsuarioRepository implements UsuarioRepository {
   }
 
   async findById(tenant: TenantId, id: string): Promise<Usuario | null> {
-    const rows: FilaUsuario[] = await this.dataSource.query(`${SELECT_U} WHERE tenant_id = $1 AND id = $2`, [tenant, id]);
+    const rows: FilaUsuario[] = await q(this.dataSource, tenant).query(`${SELECT_U} WHERE tenant_id = $1 AND id = $2`, [tenant, id]);
     return rows[0] ? toUsuario(rows[0]) : null;
   }
 
   async findByCorreo(tenant: TenantId, correo: string): Promise<Usuario | null> {
-    const rows: FilaUsuario[] = await this.dataSource.query(`${SELECT_U} WHERE tenant_id = $1 AND correo = $2`, [tenant, correo]);
+    const rows: FilaUsuario[] = await q(this.dataSource, tenant).query(`${SELECT_U} WHERE tenant_id = $1 AND correo = $2`, [tenant, correo]);
     return rows[0] ? toUsuario(rows[0]) : null;
   }
 
   async list(tenant: TenantId): Promise<Usuario[]> {
-    const rows: FilaUsuario[] = await this.dataSource.query(`${SELECT_U} WHERE tenant_id = $1 ORDER BY creado_en ASC`, [tenant]);
+    const rows: FilaUsuario[] = await q(this.dataSource, tenant).query(`${SELECT_U} WHERE tenant_id = $1 ORDER BY creado_en ASC`, [tenant]);
     return rows.map(toUsuario);
   }
 }
@@ -128,7 +129,7 @@ export class SqlIdentityEventPublisher implements EventPublisher {
   async publish(tenant: TenantId, eventos: readonly DomainEvent[]): Promise<void> {
     for (const e of eventos) {
       const aggregateId = e.tipo === "TenantCreado" ? e.tenantId : e.usuarioId;
-      await this.dataSource.query(
+      await q(this.dataSource, tenant).query(
         `INSERT INTO outbox (tenant_id, tipo_evento, aggregate_id, payload) VALUES ($1,$2,$3,$4)`,
         [tenant, e.tipo, aggregateId, JSON.stringify(e)],
       );

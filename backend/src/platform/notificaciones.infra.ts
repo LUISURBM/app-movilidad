@@ -14,6 +14,7 @@
  */
 import nodemailer from "nodemailer";
 import { DataSource } from "typeorm";
+import { q } from "./tenant-sql";
 import { CanalNotificacion, Contacto, DirectorioContactos, Mensaje } from "./notificaciones";
 
 /** Superficie mínima que usamos de nodemailer (inyectable en pruebas). */
@@ -66,7 +67,7 @@ export class SqlDirectorioContactos implements DirectorioContactos {
   constructor(private readonly dataSource: DataSource) {}
 
   async contactosDeTenant(tenantId: string): Promise<Contacto[]> {
-    const filas: Array<{ nombre: string; correo: string }> = await this.dataSource.query(
+    const filas: Array<{ nombre: string; correo: string }> = await q(this.dataSource, tenantId).query(
       `SELECT nombre, correo
          FROM usuario
         WHERE tenant_id = $1

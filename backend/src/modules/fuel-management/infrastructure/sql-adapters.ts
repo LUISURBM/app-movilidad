@@ -7,6 +7,7 @@
  * además filtran por tenant_id (defensa en profundidad, ADR-0008).
  */
 import { DataSource } from "typeorm";
+import { q } from "../../../platform/tenant-sql";
 import { TenantId } from "../../../shared/kernel";
 import { Tanqueo } from "../domain/tanqueo.aggregate";
 import { UnidadCombustible } from "../domain/value-objects";
@@ -46,7 +47,7 @@ export class SqlTanqueoRepository implements TanqueoRepository {
   constructor(private readonly dataSource: DataSource) {}
 
   async findByClientId(tenant: TenantId, clientId: string): Promise<Tanqueo | null> {
-    const rows: FilaTanqueo[] = await this.dataSource.query(
+    const rows: FilaTanqueo[] = await q(this.dataSource, tenant).query(
       `SELECT id, client_id, vehiculo_id, cantidad, unidad, valor_cop, odometro, ocurrido_en
        FROM tanqueo WHERE tenant_id = $1 AND client_id = $2`,
       [tenant, clientId],
@@ -57,7 +58,7 @@ export class SqlTanqueoRepository implements TanqueoRepository {
   async append(tenant: TenantId, t: Tanqueo): Promise<void> {
     const s = t.snapshot();
     // ON CONFLICT DO NOTHING: append-only + dedupe físico por (tenant, client_id) (R5).
-    await this.dataSource.query(
+    await q(this.dataSource, tenant).query(
       `INSERT INTO tanqueo (id, tenant_id, client_id, vehiculo_id, cantidad, unidad, valor_cop, odometro, ocurrido_en)
        VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9)
        ON CONFLICT (tenant_id, client_id) DO NOTHING`,
@@ -66,7 +67,7 @@ export class SqlTanqueoRepository implements TanqueoRepository {
   }
 
   async listByVehiculo(tenant: TenantId, vehiculoId: string): Promise<Tanqueo[]> {
-    const rows: FilaTanqueo[] = await this.dataSource.query(
+    const rows: FilaTanqueo[] = await q(this.dataSource, tenant).query(
       `SELECT id, client_id, vehiculo_id, cantidad, unidad, valor_cop, odometro, ocurrido_en
        FROM tanqueo WHERE tenant_id = $1 AND vehiculo_id = $2 ORDER BY ocurrido_en ASC, creado_en ASC`,
       [tenant, vehiculoId],
@@ -79,7 +80,7 @@ export class SqlOdometroVehiculo implements OdometroVehiculoGateway {
   constructor(private readonly dataSource: DataSource) {}
 
   async lecturaActual(tenant: TenantId, vehiculoId: string): Promise<number | null> {
-    const rows: Array<{ lectura: number }> = await this.dataSource.query(
+    const rows: Array<{ lectura: number }> = await q(this.dataSource, tenant).query(
       `SELECT lectura FROM odometro_vehiculo WHERE tenant_id = $1 AND vehiculo_id = $2`,
       [tenant, vehiculoId],
     );
@@ -92,7 +93,7 @@ export class SqlOdometroVehiculo implements OdometroVehiculoGateway {
     odometroKm: number,
   ): Promise<ResultadoOdometro> {
     // GREATEST impone la monotonía (P8/R8): la lectura solo avanza, nunca retrocede.
-    const rows: Array<{ lectura: number }> = await this.dataSource.query(
+    const rows: Array<{ lectura: number }> = await q(this.dataSource, tenant).query(
       `INSERT INTO odometro_vehiculo (tenant_id, vehiculo_id, lectura)
        VALUES ($1,$2,$3)
        ON CONFLICT (tenant_id, vehiculo_id)
@@ -114,7 +115,7 @@ export class SqlFuelEventPublisher implements EventPublisher {
   async publish(tenant: TenantId, eventos: readonly DomainEvent[]): Promise<void> {
     for (const e of eventos) {
       const aggregateId = "tanqueoId" in e ? (e as { tanqueoId: string }).tanqueoId : "";
-      await this.dataSource.query(
+      await q(this.dataSource, tenant).query(
         `INSERT INTO outbox (tenant_id, tipo_evento, aggregate_id, payload)
          VALUES ($1,$2,$3,$4)`,
         [tenant, e.tipo, aggregateId, JSON.stringify(e)],

@@ -3,6 +3,7 @@
  * tabla `conductor` de la migración 0006, con RLS por tenant. SQL parametrizado directo.
  */
 import { DataSource } from "typeorm";
+import { q } from "../../../platform/tenant-sql";
 import { TenantId } from "../../../shared/kernel";
 import { Conductor } from "../domain/conductor.aggregate";
 import { DocumentoIdentidad, Licencia } from "../domain/value-objects";
@@ -41,7 +42,7 @@ export class SqlConductorRepository implements ConductorRepository {
 
   async save(tenant: TenantId, c: Conductor): Promise<void> {
     const s = c.snapshot();
-    await this.dataSource.query(
+    await q(this.dataSource, tenant).query(
       `INSERT INTO conductor
          (id, tenant_id, nombre, documento, licencia_numero, licencia_categoria, licencia_vencimiento, usuario_id)
        VALUES ($1,$2,$3,$4,$5,$6,$7,$8)
@@ -55,7 +56,7 @@ export class SqlConductorRepository implements ConductorRepository {
   }
 
   async findById(tenant: TenantId, id: string): Promise<Conductor | null> {
-    const rows: FilaConductor[] = await this.dataSource.query(
+    const rows: FilaConductor[] = await q(this.dataSource, tenant).query(
       `${SELECT} WHERE tenant_id = $1 AND id = $2`,
       [tenant, id],
     );
@@ -63,7 +64,7 @@ export class SqlConductorRepository implements ConductorRepository {
   }
 
   async findByDocumento(tenant: TenantId, documento: string): Promise<Conductor | null> {
-    const rows: FilaConductor[] = await this.dataSource.query(
+    const rows: FilaConductor[] = await q(this.dataSource, tenant).query(
       `${SELECT} WHERE tenant_id = $1 AND documento = $2`,
       [tenant, documento],
     );
@@ -71,7 +72,7 @@ export class SqlConductorRepository implements ConductorRepository {
   }
 
   async list(tenant: TenantId): Promise<Conductor[]> {
-    const rows: FilaConductor[] = await this.dataSource.query(
+    const rows: FilaConductor[] = await q(this.dataSource, tenant).query(
       `${SELECT} WHERE tenant_id = $1 ORDER BY creado_en ASC`,
       [tenant],
     );
@@ -84,7 +85,7 @@ export class SqlDriverEventPublisher implements EventPublisher {
 
   async publish(tenant: TenantId, eventos: readonly DomainEvent[]): Promise<void> {
     for (const e of eventos) {
-      await this.dataSource.query(
+      await q(this.dataSource, tenant).query(
         `INSERT INTO outbox (tenant_id, tipo_evento, aggregate_id, payload)
          VALUES ($1,$2,$3,$4)`,
         [tenant, e.tipo, (e as { conductorId: string }).conductorId, JSON.stringify(e)],

@@ -4,6 +4,7 @@
  * Asumen la sesión con `app.current_tenant` fijado (ver tenant-datasource.ts).
  */
 import { DataSource } from "typeorm";
+import { q } from "../../../platform/tenant-sql";
 import { TenantId } from "../../../shared/kernel";
 import { Vehiculo } from "../domain/vehiculo.aggregate";
 import {
@@ -55,7 +56,7 @@ export class SqlVehiculoRepository implements VehiculoRepository {
 
   async save(tenant: TenantId, v: Vehiculo): Promise<void> {
     const s = v.snapshot();
-    await this.dataSource.query(
+    await q(this.dataSource, tenant).query(
       `INSERT INTO vehiculo
          (id, tenant_id, placa, clase, marca, modelo, anio, propietario_id, odometro,
           afiliacion_empresa_id, afiliacion_desde, estado)
@@ -75,7 +76,7 @@ export class SqlVehiculoRepository implements VehiculoRepository {
   }
 
   async findById(tenant: TenantId, id: string): Promise<Vehiculo | null> {
-    const rows: FilaVehiculo[] = await this.dataSource.query(
+    const rows: FilaVehiculo[] = await q(this.dataSource, tenant).query(
       `${SELECT} WHERE tenant_id = $1 AND id = $2`,
       [tenant, id],
     );
@@ -83,7 +84,7 @@ export class SqlVehiculoRepository implements VehiculoRepository {
   }
 
   async findByPlaca(tenant: TenantId, placa: string): Promise<Vehiculo | null> {
-    const rows: FilaVehiculo[] = await this.dataSource.query(
+    const rows: FilaVehiculo[] = await q(this.dataSource, tenant).query(
       `${SELECT} WHERE tenant_id = $1 AND placa = $2`,
       [tenant, placa],
     );
@@ -91,7 +92,7 @@ export class SqlVehiculoRepository implements VehiculoRepository {
   }
 
   async list(tenant: TenantId): Promise<Vehiculo[]> {
-    const rows: FilaVehiculo[] = await this.dataSource.query(
+    const rows: FilaVehiculo[] = await q(this.dataSource, tenant).query(
       `${SELECT} WHERE tenant_id = $1 ORDER BY creado_en ASC`,
       [tenant],
     );
@@ -104,7 +105,7 @@ export class SqlFleetEventPublisher implements EventPublisher {
 
   async publish(tenant: TenantId, eventos: readonly DomainEvent[]): Promise<void> {
     for (const e of eventos) {
-      await this.dataSource.query(
+      await q(this.dataSource, tenant).query(
         `INSERT INTO outbox (tenant_id, tipo_evento, aggregate_id, payload)
          VALUES ($1,$2,$3,$4)`,
         [tenant, e.tipo, (e as { vehiculoId: string }).vehiculoId, JSON.stringify(e)],

@@ -63,11 +63,14 @@ Los adjuntos viven en el volumen `datos_adjuntos` (respáldelo con `docker run -
 
 ## 5. Decisiones y deudas (honestas, para E1)
 
-- **Rol de base de datos**: la API conecta como `fleetspecial` (dueño de la BD). Las
-  políticas RLS de las migraciones NO aplican a ese rol; el aislamiento por tenant lo
-  garantizan los adaptadores (filtro explícito `tenant_id` en cada query, verificado por
-  suites) y RLS protege cualquier acceso con roles normales (psql, reportes, futuros
-  servicios). **Deuda E1**: rol dedicado sin bypass + `runInTenant` en los adaptadores.
+- **RLS activo de punta a punta (E1 cerrada)**: la API conecta como `fleetspecial_app`
+  (LOGIN, sin superuser ni BYPASSRLS; init del contenedor + GRANTs de la migración 0011).
+  Cada operación de los adaptadores corre en una transacción con `SET LOCAL
+  app.current_tenant` (`platform/tenant-sql.ts`), y el worker del outbox usa el ámbito
+  de plataforma. La base confina cada tenant AUNQUE el código tenga un bug (probado en
+  `rls-e1.pg.integration.spec.ts`). Para una base creada ANTES de E1: ejecute
+  `CREATE ROLE fleetspecial_app LOGIN NOSUPERUSER NOBYPASSRLS PASSWORD '...'` como
+  dueño, re-corra el migrador (aplica 0011) y actualice `DATABASE_URL` de la API.
 - **tsx en runtime** (sin build a dist/): despliegue = el código TS. Simple y suficiente
   hoy; compilar cuando duela el arranque o la memoria.
 - **Alertas por email**: con `FLEETSPECIAL_SMTP_URL` en `.env` (Brevo gratis, Gmail app

@@ -16,8 +16,11 @@ services:
       POSTGRES_DB: fleetspecial
       POSTGRES_USER: fleetspecial
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?defina POSTGRES_PASSWORD en .env}
+      FLEETSPECIAL_APP_DB_PASSWORD: ${FLEETSPECIAL_APP_DB_PASSWORD:?defina FLEETSPECIAL_APP_DB_PASSWORD en .env}
     volumes:
       - datos_pg:/var/lib/postgresql/data
+      # Init (solo primer arranque): rol de la API sin bypass de RLS (E1).
+      - ./postgres/init:/docker-entrypoint-initdb.d:ro
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U fleetspecial -d fleetspecial"]
       interval: 5s
@@ -44,7 +47,8 @@ services:
     restart: unless-stopped
     environment:
       FLEETSPECIAL_PERSISTENCIA: postgres
-      DATABASE_URL: postgres://fleetspecial:${POSTGRES_PASSWORD}@db:5432/fleetspecial
+      # E1: la API conecta con el rol SIN bypass — RLS confina cada tenant en la base.
+      DATABASE_URL: postgres://fleetspecial_app:${FLEETSPECIAL_APP_DB_PASSWORD}@db:5432/fleetspecial
       FLEETSPECIAL_JWT_SECRET: ${FLEETSPECIAL_JWT_SECRET:?defina FLEETSPECIAL_JWT_SECRET en .env}
       FLEETSPECIAL_ADJUNTOS_DIR: /datos/adjuntos
       # Alertas por email (spec-006): sin SMTP_URL, las notificaciones van a los logs.

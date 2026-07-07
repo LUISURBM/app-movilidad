@@ -5,6 +5,7 @@
  * para publicación confiable posterior por un worker. Aquí solo persiste; el despacho
  * (marcar publicado/reintentos) lo hace `OutboxDispatcher` (platform, fuera de este módulo).
  */
+import { enTenant } from "../../../platform/tenant-sql";
 import { DataSource } from "typeorm";
 import { TenantId } from "../../../shared/kernel";
 import { DomainEvent } from "../domain/events";
@@ -16,8 +17,10 @@ export class OutboxEventPublisher implements EventPublisher {
 
   async publish(tenant: TenantId, eventos: readonly DomainEvent[]): Promise<void> {
     if (eventos.length === 0) return;
-    const repo = this.dataSource.getRepository(OutboxEntity);
-    const filas = eventos.map((e) => {
+    // RLS E1: la escritura corre con el tenant fijado (política del outbox).
+    await enTenant(this.dataSource, tenant, async (m) => {
+      const repo = m.getRepository(OutboxEntity);
+      const filas = eventos.map((e) => {
       const aggregateId = "documentoId" in e ? (e as { documentoId: string }).documentoId : "";
       return repo.create({
         tenantId: tenant,
@@ -28,6 +31,7 @@ export class OutboxEventPublisher implements EventPublisher {
         intentos: 0,
       });
     });
-    await repo.save(filas);
+      await repo.save(filas);
+    });
   }
 }

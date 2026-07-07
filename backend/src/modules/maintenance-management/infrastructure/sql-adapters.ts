@@ -3,6 +3,7 @@
  * `umbral_mantenimiento` de la migración 0009, con RLS por tenant. SQL parametrizado directo.
  */
 import { DataSource } from "typeorm";
+import { q } from "../../../platform/tenant-sql";
 import { TenantId } from "../../../shared/kernel";
 import { Umbral } from "../domain/umbral.aggregate";
 import { DomainEvent } from "../domain/events";
@@ -39,13 +40,13 @@ export class SqlUmbralRepository implements UmbralRepository {
   constructor(private readonly dataSource: DataSource) {}
 
   async findByVehiculo(tenant: TenantId, vehiculoId: string): Promise<Umbral | null> {
-    const rows: FilaUmbral[] = await this.dataSource.query(`${SELECT} WHERE tenant_id = $1 AND vehiculo_id = $2`, [tenant, vehiculoId]);
+    const rows: FilaUmbral[] = await q(this.dataSource, tenant).query(`${SELECT} WHERE tenant_id = $1 AND vehiculo_id = $2`, [tenant, vehiculoId]);
     return rows[0] ? toUmbral(rows[0]) : null;
   }
 
   async save(tenant: TenantId, u: Umbral): Promise<void> {
     const s = u.snapshot();
-    await this.dataSource.query(
+    await q(this.dataSource, tenant).query(
       `INSERT INTO umbral_mantenimiento (id, tenant_id, vehiculo_id, cada_km, base_km, cada_meses, base_fecha, pendiente, vencido)
        VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9)
        ON CONFLICT (tenant_id, vehiculo_id) DO UPDATE SET
@@ -57,7 +58,7 @@ export class SqlUmbralRepository implements UmbralRepository {
   }
 
   async list(tenant: TenantId): Promise<Umbral[]> {
-    const rows: FilaUmbral[] = await this.dataSource.query(`${SELECT} WHERE tenant_id = $1`, [tenant]);
+    const rows: FilaUmbral[] = await q(this.dataSource, tenant).query(`${SELECT} WHERE tenant_id = $1`, [tenant]);
     return rows.map(toUmbral);
   }
 }
@@ -67,7 +68,7 @@ export class SqlMaintenanceEventPublisher implements EventPublisher {
 
   async publish(tenant: TenantId, eventos: readonly DomainEvent[]): Promise<void> {
     for (const e of eventos) {
-      await this.dataSource.query(
+      await q(this.dataSource, tenant).query(
         `INSERT INTO outbox (tenant_id, tipo_evento, aggregate_id, payload) VALUES ($1,$2,$3,$4)`,
         [tenant, e.tipo, e.mantenimientoId, JSON.stringify(e)],
       );
