@@ -47,7 +47,9 @@ services:
       DATABASE_URL: postgres://fleetspecial:${POSTGRES_PASSWORD}@db:5432/fleetspecial
       FLEETSPECIAL_JWT_SECRET: ${FLEETSPECIAL_JWT_SECRET:?defina FLEETSPECIAL_JWT_SECRET en .env}
       FLEETSPECIAL_ADJUNTOS_DIR: /datos/adjuntos
-      FLEETSPECIAL_CONTACTOS: ${FLEETSPECIAL_CONTACTOS:-}
+      # Alertas por email (spec-006): sin SMTP_URL, las notificaciones van a los logs.
+      FLEETSPECIAL_SMTP_URL: ${FLEETSPECIAL_SMTP_URL:-}
+      FLEETSPECIAL_SMTP_FROM: ${FLEETSPECIAL_SMTP_FROM:-}
       OUTBOX_POLL_MS: ${OUTBOX_POLL_MS:-5000}
     volumes:
       - datos_adjuntos:/datos/adjuntos

@@ -70,8 +70,10 @@ Los adjuntos viven en el volumen `datos_adjuntos` (respáldelo con `docker run -
   servicios). **Deuda E1**: rol dedicado sin bypass + `runInTenant` en los adaptadores.
 - **tsx en runtime** (sin build a dist/): despliegue = el código TS. Simple y suficiente
   hoy; compilar cuando duela el arranque o la memoria.
-- **Notificaciones por consola** (`docker compose logs api`): el canal email/SMS es un
-  puerto pendiente (spec-006 gap).
+- **Alertas por email**: con `FLEETSPECIAL_SMTP_URL` en `.env` (Brevo gratis, Gmail app
+  password o cualquier SMTP), los vencimientos y asignaciones rechazadas llegan al correo
+  de los usuarios Activos Admin/Operador de cada Empresa. Sin SMTP, salen por
+  `docker compose logs api`. Si el SMTP falla, el outbox reintenta con backoff (nada se pierde).
 - **Escalar**: la API es stateless (estado en Postgres + volumen de adjuntos); el
   dispatcher del outbox usa `SKIP LOCKED` (varios workers sin pisarse). Réplicas o
   Kubernetes (infrastructure/k8s) sin reescribir — solo cambia el target.

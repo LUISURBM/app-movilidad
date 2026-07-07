@@ -42,6 +42,10 @@ import {
   NotificacionesSink,
 } from "./platform/notificaciones";
 import {
+  SqlDirectorioContactos,
+  smtpCanalDesdeEnv,
+} from "./platform/notificaciones.infra";
+import {
   DailyTenantJob,
   InMemoryTenantRegistry,
   TenantRegistry,
@@ -131,12 +135,23 @@ class PlatformWorkers implements OnApplicationBootstrap, OnApplicationShutdown {
       provide: OUTBOX_DISPATCHER,
       inject: [DATA_SOURCE],
       useFactory: (ds: DataSource | null) => {
-        const directorio = new InMemoryDirectorioContactos();
-        for (const par of (process.env.FLEETSPECIAL_CONTACTOS ?? "").split(",")) {
-          const [tenant, email] = par.split(":").map((s) => s.trim());
-          if (tenant && email) directorio.agregar(tenant, { email });
-        }
-        const sink = new NotificacionesSink(directorio, new ConsoleCanalNotificacion());
+        // Destinatarios: en postgres, los usuarios Activos Admin/Operador del
+        // tenant (spec-002); en memoria, CSV desde env (dev/demo).
+        const directorio = elegirAdaptador(
+          ds,
+          (d) => new SqlDirectorioContactos(d),
+          () => {
+            const enMemoria = new InMemoryDirectorioContactos();
+            for (const par of (process.env.FLEETSPECIAL_CONTACTOS ?? "").split(",")) {
+              const [tenant, email] = par.split(":").map((s) => s.trim());
+              if (tenant && email) enMemoria.agregar(tenant, { email });
+            }
+            return enMemoria;
+          },
+        );
+        // Canal: SMTP real si FLEETSPECIAL_SMTP_URL está definido; consola si no.
+        const canal = smtpCanalDesdeEnv() ?? new ConsoleCanalNotificacion();
+        const sink = new NotificacionesSink(directorio, canal);
         // Postgres: la tabla `outbox` real (SKIP LOCKED); memoria: store local.
         const store = elegirAdaptador(
           ds,
