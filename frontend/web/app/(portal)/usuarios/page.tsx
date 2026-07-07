@@ -6,7 +6,7 @@ import {
   FormularioInvitacion,
   useUsuarios,
 } from "@/features/usuarios";
-import { problemaDe } from "@/lib/api";
+import { problemaDe, useEsAdministrador } from "@/lib/api";
 import { etiquetaRol } from "@/lib/format";
 import type { schemas } from "@fleetspecial/api";
 import {
@@ -30,6 +30,7 @@ const ETIQUETA_ESTADO: Record<Usuario["estado"], string> = {
 
 export default function PaginaUsuarios() {
   const usuarios = useUsuarios();
+  const esAdmin = useEsAdministrador();
   const [invitar, setInvitar] = useState(false);
   const [editando, setEditando] = useState<Usuario | null>(null);
 
@@ -40,7 +41,11 @@ export default function PaginaUsuarios() {
       <Encabezado
         titulo="Usuarios"
         descripcion="Personas con acceso a este tenant y sus roles. Solo Administrador puede gestionar."
-        accion={<BotonPrimario onClick={() => setInvitar(true)}>Invitar usuario</BotonPrimario>}
+        accion={
+          esAdmin ? (
+            <BotonPrimario onClick={() => setInvitar(true)}>Invitar usuario</BotonPrimario>
+          ) : undefined
+        }
       />
       <Tarjeta>
         {usuarios.isPending ? <Cargando /> : null}
@@ -75,7 +80,9 @@ export default function PaginaUsuarios() {
                   </span>
                 </td>
                 <td className="px-4 py-3 text-right">
-                  <BotonSecundario onClick={() => setEditando(u)}>Editar</BotonSecundario>
+                  {esAdmin ? (
+                    <BotonSecundario onClick={() => setEditando(u)}>Editar</BotonSecundario>
+                  ) : null}
                 </td>
               </tr>
             ))}

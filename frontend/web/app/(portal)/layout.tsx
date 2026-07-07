@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { useEffect, useState, type ReactNode } from "react";
-import { useSesion } from "@/lib/api";
+import { useEsAdministrador, useSesion } from "@/lib/api";
 import { ModalCambiarPassword } from "@/features/usuarios";
 
 /**
@@ -11,7 +11,7 @@ import { ModalCambiarPassword } from "@/features/usuarios";
  * Las secciones reflejan los bounded contexts (lenguaje ubicuo).
  */
 
-const SECCIONES: { href: string; titulo: string }[] = [
+const SECCIONES: { href: string; titulo: string; soloAdmin?: boolean }[] = [
   { href: "/", titulo: "Cumplimiento" },
   { href: "/servicios", titulo: "Servicios" },
   { href: "/vehiculos", titulo: "Vehículos" },
@@ -19,8 +19,9 @@ const SECCIONES: { href: string; titulo: string }[] = [
   { href: "/documentos", titulo: "Documentos" },
   { href: "/combustible", titulo: "Combustible" },
   { href: "/mantenimiento", titulo: "Mantenimiento" },
-  { href: "/usuarios", titulo: "Usuarios" },
-  { href: "/configuracion/catalogo", titulo: "Catálogo" },
+  // RBAC visual (spec-002 R1/R11): gestionar usuarios y catálogo es de Administrador.
+  { href: "/usuarios", titulo: "Usuarios", soloAdmin: true },
+  { href: "/configuracion/catalogo", titulo: "Catálogo", soloAdmin: true },
 ];
 
 export default function PortalLayout({ children }: { children: ReactNode }) {
@@ -28,6 +29,8 @@ export default function PortalLayout({ children }: { children: ReactNode }) {
   const router = useRouter();
   const pathname = usePathname();
   const [cambiandoPassword, setCambiandoPassword] = useState(false);
+  const esAdmin = useEsAdministrador();
+  const secciones = SECCIONES.filter((s) => !s.soloAdmin || esAdmin);
 
   useEffect(() => {
     if (sesion === null) router.replace("/login");
@@ -47,7 +50,7 @@ export default function PortalLayout({ children }: { children: ReactNode }) {
             <span className="hidden text-sm font-semibold sm:block">FleetSpecial</span>
           </Link>
           <nav className="flex flex-1 gap-1 overflow-x-auto text-sm" aria-label="Principal">
-            {SECCIONES.map((s) => {
+            {secciones.map((s) => {
               const activo =
                 s.href === "/" ? pathname === "/" : pathname.startsWith(s.href);
               return (

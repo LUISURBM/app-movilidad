@@ -26,6 +26,7 @@ import {
   CambiarPassword,
   hashCodigoInvitacion,
   IniciarSesion,
+  LimitadorIntentos,
 } from "./application/auth.use-cases";
 
 const PASSWORD = "clave-segura-123";
@@ -208,6 +209,47 @@ describe("spec-015 — invitación de un solo uso", () => {
     // El código sigue vivo: ahora sí funciona.
     const buena = await aceptar.execute({ codigo, password: "clave-de-beto-88" });
     expect(buena.ok).toBe(true);
+  });
+});
+
+describe("spec-015 — límite de intentos de login (regla 12)", () => {
+  it("al 6.º fallo en la ventana responde demasiados_intentos; el éxito reinicia", async () => {
+    const env = nuevoEntorno();
+    await registrarEmpresa(env.identityDeps);
+
+    let reloj = 0;
+    const limitador = new LimitadorIntentos(5, 15 * 60 * 1000, () => reloj);
+    const login = new IniciarSesion(env.authDeps, limitador);
+
+    for (let i = 0; i < 5; i += 1) {
+      const r = await login.execute({ correo: "luis@duster.co", password: "clave-mala-000" });
+      expect(!r.ok && r.error.code).toBe("credenciales_invalidas");
+    }
+    // 6.º intento: bloqueado ANTES de verificar (aunque la clave fuera correcta).
+    const bloqueado = await login.execute({ correo: "luis@duster.co", password: PASSWORD });
+    expect(!bloqueado.ok && bloqueado.error.code).toBe("demasiados_intentos");
+
+    // Pasada la ventana, vuelve a intentar; el éxito limpia el contador.
+    reloj = 16 * 60 * 1000;
+    const ok = await login.execute({ correo: "luis@duster.co", password: PASSWORD });
+    expect(ok.ok).toBe(true);
+    const otraVez = await login.execute({ correo: "luis@duster.co", password: "clave-mala-000" });
+    expect(!otraVez.ok && otraVez.error.code).toBe("credenciales_invalidas"); // cuenta desde 1
+  });
+
+  it("el límite es por correo: otro correo no queda bloqueado", async () => {
+    const env = nuevoEntorno();
+    await registrarEmpresa(env.identityDeps);
+    const limitador = new LimitadorIntentos(2, 15 * 60 * 1000, () => 0);
+    const login = new IniciarSesion(env.authDeps, limitador);
+
+    await login.execute({ correo: "otro@x.co", password: "mala-clave-000" });
+    await login.execute({ correo: "otro@x.co", password: "mala-clave-000" });
+    const bloqueado = await login.execute({ correo: "otro@x.co", password: "mala-clave-000" });
+    expect(!bloqueado.ok && bloqueado.error.code).toBe("demasiados_intentos");
+
+    const luis = await login.execute({ correo: "luis@duster.co", password: PASSWORD });
+    expect(luis.ok).toBe(true);
   });
 });
 

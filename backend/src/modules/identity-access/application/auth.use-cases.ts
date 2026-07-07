@@ -64,13 +64,64 @@ const CREDENCIALES_INVALIDAS = new DomainError(
   "Correo o contraseña incorrectos.",
 );
 
+/**
+ * Limitador de intentos de login (deuda de spec-015, regla 12): ventana fija
+ * de 15 minutos, 5 fallos por correo → `demasiados_intentos` (429). En memoria
+ * y por instancia — suficiente con una réplica (E0); Redis cuando haya varias.
+ * Un login EXITOSO limpia el contador.
+ */
+export class LimitadorIntentos {
+  private fallos = new Map<string, { cuenta: number; desde: number }>();
+
+  constructor(
+    private readonly maxIntentos = 5,
+    private readonly ventanaMs = 15 * 60 * 1000,
+    private readonly ahora: () => number = () => Date.now(),
+  ) {}
+
+  bloqueado(clave: string): boolean {
+    const r = this.fallos.get(clave);
+    if (!r) return false;
+    if (this.ahora() - r.desde >= this.ventanaMs) {
+      this.fallos.delete(clave);
+      return false;
+    }
+    return r.cuenta >= this.maxIntentos;
+  }
+
+  registrarFallo(clave: string): void {
+    const ahora = this.ahora();
+    const r = this.fallos.get(clave);
+    if (!r || ahora - r.desde >= this.ventanaMs) {
+      this.fallos.set(clave, { cuenta: 1, desde: ahora });
+      return;
+    }
+    r.cuenta += 1;
+  }
+
+  limpiar(clave: string): void {
+    this.fallos.delete(clave);
+  }
+}
+
+const DEMASIADOS_INTENTOS = new DomainError(
+  "demasiados_intentos",
+  "Demasiados intentos fallidos. Espere unos minutos e intente de nuevo.",
+);
+
 // ───────────────────────── spec-015: Iniciar sesión ─────────────────────────
 
 export class IniciarSesion {
   /** Hash de sacrificio para igualar el tiempo cuando el correo no existe. */
   private hashSacrificio: Promise<string> | undefined;
+  private readonly limitador: LimitadorIntentos;
 
-  constructor(private readonly deps: AuthDeps) {}
+  constructor(
+    private readonly deps: AuthDeps,
+    limitador?: LimitadorIntentos,
+  ) {
+    this.limitador = limitador ?? new LimitadorIntentos();
+  }
 
   async execute(input: {
     correo: string;
@@ -80,6 +131,7 @@ export class IniciarSesion {
     if (!this.deps.emisor.disponible()) return err(NO_CONFIGURADA);
 
     const correo = normalizarCorreo(input.correo);
+    if (this.limitador.bloqueado(correo)) return err(DEMASIADOS_INTENTOS);
     let candidatas = await this.deps.credenciales.buscarPorCorreo(correo);
 
     // Desambiguación por Empresa (mismo correo en varios tenants — spec-002).
@@ -96,6 +148,7 @@ export class IniciarSesion {
       // Verificación de sacrificio: mismo costo que un intento real (no filtrar correos).
       this.hashSacrificio ??= this.deps.hasher.derivar("sacrificio-timing");
       await this.deps.hasher.verificar(input.password, await this.hashSacrificio);
+      this.limitador.registrarFallo(correo);
       return err(CREDENCIALES_INVALIDAS);
     }
     if (candidatas.length > 1) {
@@ -109,20 +162,27 @@ export class IniciarSesion {
 
     const credencial = candidatas[0];
     const valida = await this.deps.hasher.verificar(input.password, credencial.passwordHash);
-    if (!valida) return err(CREDENCIALES_INVALIDAS);
+    if (!valida) {
+      this.limitador.registrarFallo(correo);
+      return err(CREDENCIALES_INVALIDAS);
+    }
 
     const tenant = await this.deps.tenants.findById(credencial.tenantId);
     const usuario = await this.deps.usuarios.findById(
       credencial.tenantId as TenantId,
       credencial.usuarioId,
     );
-    if (!tenant || !usuario) return err(CREDENCIALES_INVALIDAS);
+    if (!tenant || !usuario) {
+      this.limitador.registrarFallo(correo);
+      return err(CREDENCIALES_INVALIDAS);
+    }
     if (usuario.estado !== EstadoUsuario.Activo) {
       return err(
         new DomainError("usuario_no_activo", "El usuario no está habilitado para iniciar sesión."),
       );
     }
 
+    this.limitador.limpiar(correo); // éxito: reinicia la ventana
     const sesion = this.deps.emisor.emitir({
       sub: usuario.id,
       tenantId: tenant.id,

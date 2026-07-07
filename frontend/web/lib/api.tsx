@@ -34,6 +34,8 @@ export interface Sesion {
   token: string;
   razonSocial: string;
   plan: string;
+  /** Roles del usuario (spec-015). Ausente en el modo token (se muestra todo). */
+  roles?: string[];
 }
 
 const CLAVE_SESION = "fleetspecial.sesion";
@@ -140,7 +142,18 @@ export async function iniciarSesionConCredenciales(
     token: r.data.token,
     razonSocial: r.data.tenant.razonSocial,
     plan: "",
+    roles: r.data.usuario.roles,
   };
+}
+
+/**
+ * RBAC visual: el backend hace cumplir los permisos (403); esto solo evita
+ * mostrar secciones/acciones que van a fallar. Sin roles (modo token) se
+ * muestra todo.
+ */
+export function useEsAdministrador(): boolean {
+  const { sesion } = useSesion();
+  return !sesion?.roles || sesion.roles.includes("Administrador");
 }
 
 /**

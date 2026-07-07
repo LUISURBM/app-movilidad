@@ -16,9 +16,10 @@ const CODE_TO_STATUS: Record<string, number> = {
   usuario_no_activo: 403,
   // 404 Not Found
   usuario_no_encontrado: 404,
-  // 401 / 410 / 503 (spec-015)
+  // 401 / 410 / 429 / 503 (spec-015)
   credenciales_invalidas: 401,
   invitacion_no_valida: 410,
+  demasiados_intentos: 429,
   auth_no_configurada: 503,
   // 422 Unprocessable Entity (validaciones)
   tratamiento_no_aceptado: 422,

@@ -115,6 +115,11 @@ paths:
             application/problem+json:
               schema: { $ref: '#/components/schemas/Problem' }
         '422': { $ref: '#/components/responses/ValidationError' }
+        '429':
+          description: Demasiados intentos fallidos (5 por correo en 15 minutos).
+          content:
+            application/problem+json:
+              schema: { $ref: '#/components/schemas/Problem' }
         '503':
           description: Autenticación no configurada en el servidor (sin secreto JWT).
           content:
