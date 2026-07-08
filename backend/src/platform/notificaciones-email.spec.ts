@@ -79,14 +79,23 @@ describe("SmtpCanal", () => {
 describe("SqlDirectorioContactos", () => {
   it("consulta usuarios activos Admin/Operador del tenant y mapea a contactos", async () => {
     const consultas: Array<{ sql: string; params: unknown[] }> = [];
-    const dsFalso = {
-      query: async (sql: string, params: unknown[]) => {
+    // El adaptador enruta por enTenant() (transacción con SET LOCAL
+    // app.current_tenant para RLS), así que el DataSource falso expone
+    // transaction() y provee un manager con query — mismo shape que el real
+    // (cf. dsSobrePglite en rls-e1.pg.integration.spec.ts).
+    const manager = {
+      query: async (sql: string, params: unknown[] = []) => {
         consultas.push({ sql, params });
+        if (sql.includes("set_config")) return []; // fija el tenant: sin filas
         return [
           { nombre: "Luis", correo: "luis@duster.co" },
           { nombre: "Ana", correo: "ana@duster.co" },
         ];
       },
+    };
+    const dsFalso = {
+      query: manager.query,
+      transaction: (work: (m: typeof manager) => Promise<unknown>) => work(manager),
     };
     const contactos = await new SqlDirectorioContactos(
       dsFalso as never,
@@ -96,8 +105,11 @@ describe("SqlDirectorioContactos", () => {
       { nombre: "Luis", email: "luis@duster.co" },
       { nombre: "Ana", email: "ana@duster.co" },
     ]);
-    expect(consultas[0].params).toEqual(["tenant-duster"]);
-    expect(consultas[0].sql).toContain("estado = 'activo'");
-    expect(consultas[0].sql).toContain("Administrador");
+    // enTenant fija primero el tenant (SET LOCAL) y luego corre la consulta.
+    expect(consultas.some((c) => c.sql.includes("set_config"))).toBe(true);
+    const negocio = consultas.find((c) => c.sql.includes("FROM usuario"))!;
+    expect(negocio.params).toEqual(["tenant-duster"]);
+    expect(negocio.sql).toContain("estado = 'activo'");
+    expect(negocio.sql).toContain("Administrador");
   });
 });
