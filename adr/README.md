@@ -52,6 +52,7 @@ Usamos una variante de **MADR** (Markdown Architecture Decision Records) combina
 | [0007](0007-independencia-de-proveedor-ia-capa-abstraccion.md) | **Independencia de proveedor de IA** (capa de abstracción) | Aceptada | AI Agent Friendly · Independencia de IA | [Fase 8](../agents/README.md) |
 | [0008](0008-multi-tenant-shared-db-rls.md) | **Multi-tenant: shared DB + tenant_id + RLS** | Aceptada | Bootstrapping · Cumplimiento | [Fase 7](../docs/07-saas-multitenant.md) |
 | [0009](0009-gestor-paquetes-pnpm.md) | **pnpm como gestor de paquetes del monorepo** | Aceptada | Bootstrapping · No sobreingeniería · Cumplimiento | [Fase 9](../docs/09-estructura-repositorio.md) |
+| [0010](0010-evaluacion-replataforma-spring-java-hexagonal.md) | **Mantener NestJS/TS** tras evaluar re-plataforma a Spring/Java hexagonal (reafirma [0002](0002-stack-backend.md) con triggers) | Aceptada | No sobreingeniería · Time-to-market · Independencia de framework | [Fase 5](../docs/05-arquitectura-tecnica.md) |
 
 ## Cómo añadir un ADR
 
