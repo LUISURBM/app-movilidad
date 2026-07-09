@@ -2,7 +2,7 @@
 
 - **Bounded Context:** BC-5 Service Scheduling (CORE) — operación offline-first
 - **Prioridad:** MVP
-- **Estado:** Approved
+- **Estado:** Implemented
 - **Aprobada por:** Luis (Product Manager + dominio) · 2026-06-25
 - **Specs relacionadas:** spec-008 (Asignación), spec-011 (Tanqueo offline), spec-014 (Novedad offline)
 
@@ -122,4 +122,4 @@ Característica: El Conductor ejecuta su Servicio offline y sincroniza al recone
     Entonces el dato del Conductor se conserva íntegro
     Y el conflicto se escala al admin en el portal para resolución manual
     Y nunca se descarta en silencio
-```
+`

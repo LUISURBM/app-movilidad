@@ -66,4 +66,6 @@ Un fundador operará **una Renault Duster afiliada** a una empresa transportador
 
 ## Estado
 
-Blueprint v1.0 — fase de análisis y diseño. **No contiene código de producción** (por diseño; ver Reglas del encargo). Los contratos (`backend/contracts/`) y andamiajes son ilustrativos y marcan el siguiente paso de implementación.
+**MVP (H0) code-complete y en verificación, a las puertas del _dogfooding_ con la Duster.** El repositorio contiene código funcional en los tres componentes:
+
+- **Backend (NestJS + Clean Architecture):** 7 bounded contexts, multiempresa c

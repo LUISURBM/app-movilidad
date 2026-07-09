@@ -2,7 +2,7 @@
 
 - **Bounded Context:** BC-4 Compliance & Documents (CORE)
 - **Prioridad:** MVP
-- **Estado:** Approved
+- **Estado:** Implemented
 - **Aprobada por:** Luis (Product Manager + dominio) · 2026-06-25
 - **Specs relacionadas:** spec-003 (Vehículo), spec-004 (Conductor), spec-006 (alertas y Semáforo), spec-007 (Renovación)
 
@@ -131,4 +131,4 @@ El gap de adjuntos (R5/R11) quedó **implementado end-to-end**:
 - **Portal**: subir/reemplazar/ver en Documentos y en el detalle de vehículo/conductor.
 - **Verificación**: adjuntos.spec 6 ✓ (casos de uso + FS + aislamiento R11) y
   adjuntos.e2e 8 ✓ por HTTP real (round-trip de bytes, 413, 422, 404, aislamiento
-  de tenant, renovación).
+  de tenant, renovación

@@ -2,7 +2,7 @@
 
 - **Bounded Context:** BC-4 Compliance & Documents (CORE)
 - **Prioridad:** MVP
-- **Estado:** Approved
+- **Estado:** Implemented
 - **Aprobada por:** Luis (Product Manager + dominio) · 2026-06-25
 - **Specs relacionadas:** spec-005 (registrar Documento), spec-007 (Renovación), spec-009 (regla de oro)
 
@@ -123,4 +123,4 @@ Característica: Alertas anticipadas de Vencimiento y cálculo del Semáforo
     Y que el Vehículo "ABC123" no tiene ningún Documento "Revisión técnico-mecánica"
     Cuando el reloj de dominio evalúa los Vencimientos
     Entonces el Estado de cumplimiento del Vehículo es "Vencido"
-```
+`

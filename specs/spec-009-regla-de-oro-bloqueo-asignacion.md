@@ -2,7 +2,7 @@
 
 - **Bounded Context:** BC-5 Service Scheduling (CORE) ← consulta a BC-4 Compliance & Documents vía ACL
 - **Prioridad:** MVP
-- **Estado:** Approved
+- **Estado:** Implemented
 - **Aprobada por:** Luis (Product Manager + dominio) · 2026-06-25
 - **Specs relacionadas:** spec-006 (Semáforo), spec-007 (Renovación — rehabilitación), spec-008 (crear Servicio y asignar)
 
@@ -107,4 +107,4 @@ Característica: Regla de oro - bloquear la Asignación si el recurso no está a
     Cuando el Operador intenta asignar el Vehículo "ABC123" al Servicio
     Entonces la Asignación se rechaza
     Y el motivo del rechazo es "choque"
-```
+`

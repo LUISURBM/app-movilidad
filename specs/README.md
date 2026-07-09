@@ -88,16 +88,17 @@ Las specs usan las keywords **oficiales de Gherkin en español**. Equivalencias 
 | spec-002 | Invitar usuarios y asignar roles dentro del Tenant | BC-1 Identity & Access | MVP | Implemented | [spec-002-invitar-usuarios-roles.md](spec-002-invitar-usuarios-roles.md) |
 | spec-003 | Registrar un Vehículo (placa única por Tenant, odómetro monótono) | BC-2 Fleet Management | MVP | Implemented | [spec-003-registrar-vehiculo.md](spec-003-registrar-vehiculo.md) |
 | spec-004 | Registrar un Conductor y su Licencia de conducción | BC-3 Driver Management | MVP | Implemented | [spec-004-registrar-conductor.md](spec-004-registrar-conductor.md) |
-| spec-005 | Registrar un Documento con Vencimiento y adjunto | BC-4 Compliance & Documents (CORE) | MVP | Approved | [spec-005-registrar-documento.md](spec-005-registrar-documento.md) |
-| spec-006 | Alertas anticipadas de Vencimiento (30/15/3 días) y cálculo del Semáforo | BC-4 Compliance & Documents (CORE) | MVP | Approved | [spec-006-alertas-vencimiento-semaforo.md](spec-006-alertas-vencimiento-semaforo.md) |
-| spec-007 | Renovación de un Documento con histórico | BC-4 Compliance & Documents (CORE) | MVP | Approved | [spec-007-renovacion-documento.md](spec-007-renovacion-documento.md) |
-| spec-008 | Crear un Servicio y asignar Vehículo + Conductor (choques de Ventana horaria) | BC-5 Service Scheduling (CORE) | MVP | Approved | [spec-008-crear-servicio-asignacion.md](spec-008-crear-servicio-asignacion.md) |
-| spec-009 | Regla de oro: bloquear Asignación si el recurso no está al día (Semáforo rojo) | BC-5 Service Scheduling (CORE) + BC-4 vía ACL | MVP | Approved | [spec-009-regla-de-oro-bloqueo-asignacion.md](spec-009-regla-de-oro-bloqueo-asignacion.md) |
-| spec-010 | El Conductor ejecuta su Servicio OFFLINE (mi día, iniciar/finalizar, sincronizar) | BC-5 Service Scheduling (CORE), offline | MVP | Approved | [spec-010-conductor-ejecuta-servicio-offline.md](spec-010-conductor-ejecuta-servicio-offline.md) |
+| spec-005 | Registrar un Documento con Vencimiento y adjunto | BC-4 Compliance & Documents (CORE) | MVP | Implemented | [spec-005-registrar-documento.md](spec-005-registrar-documento.md) |
+| spec-006 | Alertas anticipadas de Vencimiento (30/15/3 días) y cálculo del Semáforo | BC-4 Compliance & Documents (CORE) | MVP | Implemented | [spec-006-alertas-vencimiento-semaforo.md](spec-006-alertas-vencimiento-semaforo.md) |
+| spec-007 | Renovación de un Documento con histórico | BC-4 Compliance & Documents (CORE) | MVP | Implemented | [spec-007-renovacion-documento.md](spec-007-renovacion-documento.md) |
+| spec-008 | Crear un Servicio y asignar Vehículo + Conductor (choques de Ventana horaria) | BC-5 Service Scheduling (CORE) | MVP | Implemented | [spec-008-crear-servicio-asignacion.md](spec-008-crear-servicio-asignacion.md) |
+| spec-009 | Regla de oro: bloquear Asignación si el recurso no está al día (Semáforo rojo) | BC-5 Service Scheduling (CORE) + BC-4 vía ACL | MVP | Implemented | [spec-009-regla-de-oro-bloqueo-asignacion.md](spec-009-regla-de-oro-bloqueo-asignacion.md) |
+| spec-010 | El Conductor ejecuta su Servicio OFFLINE (mi día, iniciar/finalizar, sincronizar) | BC-5 Service Scheduling (CORE), offline | MVP | Implemented | [spec-010-conductor-ejecuta-servicio-offline.md](spec-010-conductor-ejecuta-servicio-offline.md) |
 | spec-011 | Registrar Tanqueo (combustible) OFFLINE append-only con idempotencia | BC-6 Fuel Management, offline | MVP | Implemented | [spec-011-tanqueo-offline-append-only.md](spec-011-tanqueo-offline-append-only.md) |
 | spec-012 | Programar Mantenimiento preventivo por Umbral de Odómetro/fecha | BC-7 Maintenance Management | MVP | Implemented | [spec-012-mantenimiento-preventivo-umbral.md](spec-012-mantenimiento-preventivo-umbral.md) |
 | spec-013 | Gestión de Suscripción y Plan (vehículos activos, límites, entitlements) | BC-8 Billing & Subscriptions | V1 | Draft | [spec-013-gestion-suscripcion-plan.md](spec-013-gestion-suscripcion-plan.md) |
 | spec-014 | Registrar una Novedad OFFLINE con foto (append-only) | BC-5 Service Scheduling (CORE), offline | MVP | Implemented | [spec-014-novedad-offline-con-foto.md](spec-014-novedad-offline-con-foto.md) |
+| spec-015 | Autenticación con credenciales (login de correo y contraseña) | BC-1 Identity & Access | MVP | Implemented | [spec-015-autenticacion-credenciales.md](spec-015-autenticacion-credenciales.md) |
 
 > **Prioridades:** **MVP** = entra al dogfooding con la Duster (Fase 1 §5). **V1** = comercializable (self-service + cobro). **V2** = upsells diferidos (GPS live, DIAN). spec-013 es V1 porque la gestión de planes/cobro pertenece a la fase comercializable; el onboarding del MVP (spec-001) solo crea la Suscripción Free por defecto.
 
@@ -144,7 +145,7 @@ Tomando `spec-006` como ejemplo:
 # spec-006 — Alertas anticipadas de Vencimiento (30/15/3 días) y cálculo del Semáforo
 - Bounded Context: BC-4 Compliance & Documents (CORE)   ← dónde vive (Fase 2)
 - Prioridad: MVP                                         ← entra al dogfooding
-- Estado: Draft                                          ← aún en revisión
+- Estado: Implemented                                    ← construida y con Gherkin en verde
 ```
 
 - El **encabezado** te dice de un vistazo el contexto, la prioridad y la madurez.
@@ -165,4 +166,4 @@ Esquema del escenario: Estado del Documento según días restantes
 
 - Para **leerla como agente o QA:** cada `Escenario`/fila de `Ejemplos` se convierte en una verificación; el `Dado` arma el estado, el `Cuando` ejecuta la acción, el `Entonces` afirma el resultado esperado. El lenguaje ubicuo (Vencimiento, Semáforo, Documento) es **idéntico** al del código y la UI.
 
-> **Regla de oro del negocio (recordatorio transversal):** *no se puede asignar un Servicio a un Vehículo o Conductor que NO esté al día documentalmente.* El **Semáforo en rojo bloquea** (spec-009, P3); el **amarillo advierte** (spec-009, P11). Esta regla cruza Service Scheduling y Compliance vía ACL y es la invariante S3 de la Fase 2.
+> **Regla de oro del negocio (recordatorio transversal):** *no se puede asignar un Servicio a un Vehículo o Conductor

@@ -2,7 +2,7 @@
 
 - **Bounded Context:** BC-5 Service Scheduling (CORE)
 - **Prioridad:** MVP
-- **Estado:** Approved
+- **Estado:** Implemented
 - **Aprobada por:** Luis (Product Manager + dominio) · 2026-06-25
 - **Specs relacionadas:** spec-003 (Vehículo), spec-004 (Conductor), spec-009 (regla de oro), spec-010 (ejecución offline), spec-014 (Novedad)
 
@@ -109,4 +109,4 @@ Característica: Crear un Servicio y asignar Vehículo y Conductor sin choques d
     Dado que existe un Servicio en estado "Planificado"
     Cuando el Operador cancela el Servicio
     Entonces el Servicio queda en estado "Cancelado"
-```
+`

@@ -2,7 +2,7 @@
 
 - **Bounded Context:** BC-4 Compliance & Documents (CORE)
 - **Prioridad:** MVP
-- **Estado:** Approved
+- **Estado:** Implemented
 - **Aprobada por:** Luis (Product Manager + dominio) · 2026-06-25
 - **Specs relacionadas:** spec-005 (registrar Documento), spec-006 (alertas y Semáforo), spec-009 (regla de oro — rehabilitación)
 
@@ -93,4 +93,4 @@ Característica: Renovación de un Documento con histórico
     Dado que el Vehículo "ABC123" tiene una versión histórica de "SOAT" con vencimiento "2025-12-31"
     Cuando se intenta modificar o borrar esa versión histórica
     Entonces la operación se rechaza por ser el histórico inmutable
-```
+`
